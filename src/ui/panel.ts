@@ -6,6 +6,7 @@ import { billLabel } from "../data/types";
 import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
 import { add, el, niceDate, put } from "./dom";
+import { explainSite, explainStage } from "./explain";
 import { createStats } from "./stats";
 
 export const STAGES: Record<string, string> = {
@@ -138,6 +139,7 @@ export function createPanel(world: World, actions: PanelActions) {
       el("div", { class: "kicker" }, "Stage"),
       el("h2", {}, STAGES[kind] ?? kind),
       el("p", {}, `${inStage.length.toLocaleString()} active bill${inStage.length === 1 ? "" : "s"} in ${places.size} places. Pick a place to go there, or a bill to find it on the map.`),
+      explainStage([...places.values()].map((place) => place.site).sort((a, b) => a.wing.localeCompare(b.wing))),
       el("h3", {}, "Places"),
       el("ul", { class: "list" }, ...placeRows),
       el("h3", {}, inStage.length > shown.length ? `The ${shown.length} most recent bills` : "Bills"),
@@ -157,6 +159,7 @@ export function createPanel(world: World, actions: PanelActions) {
       el("div", { class: "kicker" }, billLabel(bill)),
       el("h2", {}, bill.title),
       el("p", {}, el("span", { class: "chip stage" }, STAGES[bill.loc.kind] ?? bill.loc.kind), site ? el("span", { class: "chip" }, site.label) : null, bill.policy_area ? el("span", { class: "chip" }, bill.policy_area) : null),
+      site ? explainSite(site) : null,
       el("h3", {}, "Latest action"),
       el("p", {}, el("strong", {}, niceDate(bill.last_action.date)), " — ", bill.last_action.text),
       el("h3", {}, "Sponsor"),
@@ -193,6 +196,7 @@ export function createPanel(world: World, actions: PanelActions) {
       backButton(),
       el("div", { class: "kicker" }, site.wing === "Center" ? "Shared" : site.wing),
       el("h2", {}, site.label),
+      explainSite(site),
       chairButton ? el("ul", { class: "list" }, el("li", {}, chairButton)) : null,
       el("p", {}, here.length ? `${here.length} active bill${here.length === 1 ? "" : "s"} here.` : "No bills with an action in the last 30 days are here."),
       el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${members.get(bill.sponsor)?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),

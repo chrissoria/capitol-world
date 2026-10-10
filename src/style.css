@@ -490,3 +490,33 @@ a {
   background: var(--paper-edge);
   color: var(--muted);
 }
+
+/* ── Folded explanations ── */
+
+.explain {
+  margin: 8px 0;
+  border: 2px solid var(--paper-edge);
+  border-radius: 6px;
+  background: #fffdf4;
+}
+
+.explain summary {
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  color: #1d6e9c;
+}
+
+.explain[open] summary {
+  border-bottom: 2px solid var(--paper-edge);
+}
+
+.explain p {
+  margin: 8px 10px;
+  font-size: 13px;
+}
+
+.explain summary:focus-visible {
+  outline: 3px solid var(--yellow);
+}

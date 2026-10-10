@@ -201,7 +201,7 @@ export class WorldScene extends Phaser.Scene {
       const rect = this.layout.chambers[chamber];
       const total = this.world.members.filter((m) => m.chamber === chamber).length;
       this.hints.push(
-        this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${chamber.toUpperCase()} · ${total} members\n▸ click to go inside`, 12).setOrigin(0.5, 1),
+        this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${chamber.toUpperCase()} · ${total} members`, 12).setOrigin(0.5, 1),
       );
     }
   }
