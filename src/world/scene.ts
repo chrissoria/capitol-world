@@ -408,8 +408,11 @@ export class WorldScene extends Phaser.Scene {
       const sprite = this.memberSprites.get(target.id);
       if (sprite) this.flyTo(sprite.x, sprite.y - 12, Math.max(zoomIn, 2.6));
     } else if (target.type === "bill") {
+      // Centre on the sheet itself when it is one of those laid out, otherwise on its building's dock.
       const site = this.siteOf(target.id);
-      if (site) this.flyTo(anchorOf(site).x, anchorOf(site).y - 30, zoomIn);
+      const paper = site ? this.docks.get(site.key)?.papers.find((sheet) => sheet.getData("bill") === target.id) : undefined;
+      if (paper) this.flyTo(paper.x, paper.y - 24, zoomIn);
+      else if (site) this.flyTo(anchorOf(site).x, anchorOf(site).y - 30, zoomIn);
     } else {
       const site = this.layout.sites.get(target.id);
       if (site) this.flyTo((site.rect.x + site.rect.w / 2) * TILE, (site.rect.y + site.rect.h / 2) * TILE, zoomIn);

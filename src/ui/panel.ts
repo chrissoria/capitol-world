@@ -92,9 +92,11 @@ export function createPanel(world: World, actions: PanelActions) {
   function showOverview() {
     const byStage = new Map<string, number>();
     for (const bill of world.bills) byStage.set(bill.loc.kind, (byStage.get(bill.loc.kind) ?? 0) + 1);
-    const rows = STAGE_ORDER.filter((kind) => byStage.get(kind)).map((kind) =>
-      el("li", {}, el("div", { class: "bar-row" }, el("span", {}, STAGES[kind]), el("span", { class: "count" }, String(byStage.get(kind))))),
-    );
+    const rows = STAGE_ORDER.filter((kind) => byStage.get(kind)).map((kind) => {
+      const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, STAGES[kind]), el("span", { class: "count" }, String(byStage.get(kind)))));
+      button.addEventListener("click", () => showStage(kind));
+      return el("li", {}, button);
+    });
     put(sections.inspect, 
       el("h2", {}, "What Congress is working on"),
       el(
@@ -106,8 +108,43 @@ export function createPanel(world: World, actions: PanelActions) {
       el("p", { class: "note" }, "Click a paper or a building. Click the House or the Senate to go inside and meet the members. Drag to move around; scroll or pinch to zoom."),
       el("h3", {}, "Where those bills are"),
       el("ul", { class: "list" }, ...rows),
-      el("p", { class: "note" }, `The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
+      el("p", { class: "note" }, `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
     );
+  }
+
+  /** Every bill at one stage, without having to find its building on the map. */
+  function showStage(kind: string) {
+    const inStage = world.bills.filter((bill) => bill.loc.kind === kind).sort((a, b) => b.last_action.date.localeCompare(a.last_action.date) || a.id.localeCompare(b.id));
+    const places = new Map<string, { site: Site; count: number }>();
+    for (const bill of inStage) {
+      const site = actions.siteOf(bill.id);
+      if (!site) continue;
+      const entry = places.get(site.key) ?? { site, count: 0 };
+      entry.count++;
+      places.set(site.key, entry);
+    }
+    // A stage with one building is that building: show it exactly as a click on the map would.
+    if (places.size === 1) return actions.select({ type: "site", id: [...places.keys()][0] });
+    const placeRows = [...places.values()]
+      .sort((a, b) => b.count - a.count || a.site.label.localeCompare(b.site.label))
+      .map(({ site, count }) => {
+        const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, site.label), el("span", { class: "count" }, String(count))));
+        button.addEventListener("click", () => actions.select({ type: "site", id: site.key }));
+        return el("li", {}, button);
+      });
+    const shown = inStage.slice(0, 200);
+    put(sections.inspect,
+      backButton(),
+      el("div", { class: "kicker" }, "Stage"),
+      el("h2", {}, STAGES[kind] ?? kind),
+      el("p", {}, `${inStage.length.toLocaleString()} active bill${inStage.length === 1 ? "" : "s"} in ${places.size} places. Pick a place to go there, or a bill to find it on the map.`),
+      el("h3", {}, "Places"),
+      el("ul", { class: "list" }, ...placeRows),
+      el("h3", {}, inStage.length > shown.length ? `The ${shown.length} most recent bills` : "Bills"),
+      el("ul", { class: "list" }, ...shown.map((bill) => billRow(bill))),
+      inStage.length > shown.length ? el("p", { class: "note" }, `Showing ${shown.length} of ${inStage.length.toLocaleString()}. Pick a place above to see all of its bills.`) : null,
+    );
+    sections.inspect.scrollTop = 0;
   }
 
   function showBill(bill: Bill) {
