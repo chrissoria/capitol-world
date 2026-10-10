@@ -86,10 +86,85 @@ export function createPanel(world: World, actions: PanelActions) {
     return el("li", {}, button);
   }
 
+  // ── Where the visitor has been ─────────────────────────────────────────────
+  // Every view opened in this tab is remembered, so Back retraces the steps
+  // without hunting for things on the map, and takes the map along with it.
+
+  type View = { kind: "overview" } | { kind: "stage"; stage: string } | { kind: "target"; target: Target } | { kind: "outside"; id: string };
+  const trail: { view: View; scroll: number }[] = [{ view: { kind: "overview" }, scroll: 0 }];
+  let retracing = false;
+
+  /** Note a newly opened view. Call it before the tab's contents are replaced, so the old scroll position is kept. */
+  function visit(view: View) {
+    const top = trail[trail.length - 1];
+    if (retracing || JSON.stringify(top.view) === JSON.stringify(view)) return;
+    top.scroll = sections.inspect.scrollTop;
+    trail.push({ view, scroll: 0 });
+    if (trail.length > 80) trail.shift();
+    queueMicrotask(() => (sections.inspect.scrollTop = 0));
+  }
+
+  function nameOf(view: View): string {
+    let name = "Overview";
+    if (view.kind === "stage") name = STAGES[view.stage] ?? "Stage";
+    else if (view.kind === "outside") {
+      const [, type, number] = view.id.split("-");
+      name = billLabel({ type: type.toUpperCase(), number });
+    } else if (view.kind === "target") {
+      const { type, id } = view.target;
+      if (type === "bill") name = bills.has(id) ? billLabel(bills.get(id)!) : "Bill";
+      else if (type === "member") name = members.get(id)?.name.split(" ").slice(-1)[0] ?? "Member";
+      else name = actions.siteByKey(id)?.short ?? "Building";
+    }
+    return name.length > 24 ? `${name.slice(0, 23)}…` : name;
+  }
+
+  function open(view: View) {
+    if (view.kind === "target") return actions.select(view.target);
+    actions.select(null);
+    if (view.kind === "stage") showStage(view.stage);
+    else if (view.kind === "outside") void loadSearch().then((index) => showOutside(view.id, index));
+  }
+
+  function goBack() {
+    if (trail.length < 2) return;
+    trail.pop();
+    const { view, scroll } = trail[trail.length - 1];
+    retracing = true;
+    try {
+      open(view);
+    } finally {
+      retracing = false;
+    }
+    // Put the list back where it was; a committee's calendar arrives a moment after the rest.
+    const restore = () => (sections.inspect.scrollTop = scroll);
+    queueMicrotask(restore);
+    setTimeout(restore, 350);
+  }
+
+  /** A bill with no recent action: it has no place on the map, only a page here. */
+  function openOutside(id: string) {
+    visit({ kind: "outside", id });
+    showTab("inspect");
+    history.replaceState(null, "", `#bill=${id}`);
+    void loadSearch().then((index) => showOutside(id, index)).catch(showOverview);
+  }
+
   const backButton = () => {
-    const button = el("button", { type: "button", class: "back" }, "← Overview");
-    button.addEventListener("click", () => actions.select(null));
-    return button;
+    const nav = el("div", { class: "trail" });
+    const previous = trail.length > 1 ? trail[trail.length - 2].view : undefined;
+    if (previous) {
+      const back = el("button", { type: "button", class: "back" }, `← ${nameOf(previous)}`);
+      back.setAttribute("aria-label", `Back to ${nameOf(previous)}`);
+      back.addEventListener("click", goBack);
+      nav.append(back);
+    }
+    if (previous?.kind !== "overview") {
+      const home = el("button", { type: "button", class: "back" }, "Overview");
+      home.addEventListener("click", () => actions.select(null));
+      nav.append(home);
+    }
+    return nav;
   };
 
   // ── Inspect ────────────────────────────────────────────────────────────────
@@ -130,6 +205,7 @@ export function createPanel(world: World, actions: PanelActions) {
     }
     // A stage with one building is that building: show it exactly as a click on the map would.
     if (places.size === 1) return actions.select({ type: "site", id: [...places.keys()][0] });
+    visit({ kind: "stage", stage: kind });
     const placeRows = [...places.values()]
       .sort((a, b) => b.count - a.count || a.site.label.localeCompare(b.site.label))
       .map(({ site, count }) => {
@@ -150,7 +226,6 @@ export function createPanel(world: World, actions: PanelActions) {
       el("ul", { class: "list" }, ...shown.map((bill) => billRow(bill))),
       inStage.length > shown.length ? el("p", { class: "note" }, `Showing ${shown.length} of ${inStage.length.toLocaleString()}. Pick a place above to see all of its bills.`) : null,
     );
-    sections.inspect.scrollTop = 0;
   }
 
   function showBill(bill: Bill) {
@@ -202,11 +277,8 @@ export function createPanel(world: World, actions: PanelActions) {
       const known = bills.get(id);
       const button = el("button", { type: "button" }, el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })}${known ? ` · ${known.title}` : ""}`), known ? null : el("span", { class: "row-sub" }, "Not on the map: no action in the last 30 days"));
       button.addEventListener("click", () => {
-        if (known) return actions.select({ type: "bill", id });
-        void loadSearch().then((index) => {
-          showOutside(id, index);
-          history.replaceState(null, "", `#bill=${id}`);
-        });
+        if (known) actions.select({ type: "bill", id });
+        else openOutside(id);
       });
       return el("li", {}, button);
     });
@@ -343,11 +415,7 @@ export function createPanel(world: World, actions: PanelActions) {
       );
       button.addEventListener("click", () => {
         if (onMap) actions.select({ type: "bill", id });
-        else {
-          showOutside(id, index);
-          showTab("inspect");
-          history.replaceState(null, "", `#bill=${id}`);
-        }
+        else openOutside(id);
       });
       return el("li", {}, button);
     });
@@ -424,12 +492,11 @@ export function createPanel(world: World, actions: PanelActions) {
   showOverview();
   return {
     show(target: Target | null) {
+      if (target?.type === "bill" && !bills.has(target.id)) return openOutside(target.id);
+      visit(target ? { kind: "target", target } : { kind: "overview" });
       if (!target) showOverview();
-      else if (target.type === "bill") {
-        const bill = bills.get(target.id);
-        if (bill) showBill(bill);
-        else void loadSearch().then((index) => showOutside(target.id, index)).catch(showOverview);
-      } else if (target.type === "member") {
+      else if (target.type === "bill") showBill(bills.get(target.id)!);
+      else if (target.type === "member") {
         const member = members.get(target.id);
         if (member) showMember(member);
       } else {

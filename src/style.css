@@ -563,3 +563,14 @@ a {
 .outcomes li {
   margin-bottom: 4px;
 }
+
+.trail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.trail .back {
+  margin-bottom: 0;
+}
