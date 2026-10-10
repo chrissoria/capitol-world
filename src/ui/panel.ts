@@ -66,7 +66,14 @@ export function createPanel(world: World, actions: PanelActions) {
     roster: document.getElementById("tab-roster")!,
   };
 
-  function showTab(name: keyof typeof sections) {
+  type TabName = keyof typeof sections;
+  let activeTab: TabName = "inspect";
+  /** Each tab's scroll position when it was last on show; a hidden tab reports zero. */
+  const lastScroll: Partial<Record<TabName, number>> = {};
+
+  function showTab(name: TabName) {
+    lastScroll[activeTab] = sections[activeTab].scrollTop;
+    activeTab = name;
     for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
     for (const [key, section] of Object.entries(sections)) section.hidden = key !== name;
     if (name === "stats") stats.open();
@@ -94,7 +101,16 @@ export function createPanel(world: World, actions: PanelActions) {
   // Every view opened in this tab is remembered, so Back retraces the steps
   // without hunting for things on the map, and takes the map along with it.
 
-  type View = { kind: "overview" } | { kind: "stage"; stage: string } | { kind: "target"; target: Target } | { kind: "outside"; id: string };
+  // A view opened from Search, Stats or the Roster is preceded by a note of that tab,
+  // so Back returns to the results the visitor was looking through.
+  type View =
+    | { kind: "overview" }
+    | { kind: "stage"; stage: string }
+    | { kind: "target"; target: Target }
+    | { kind: "outside"; id: string }
+    | { kind: "tab"; tab: TabName };
+  const tabOf = (view: View): TabName => (view.kind === "tab" ? view.tab : "inspect");
+  const scrollOf = (view: View) => (tabOf(view) === activeTab ? sections[activeTab].scrollTop : (lastScroll[tabOf(view)] ?? 0));
   const trail: { view: View; scroll: number }[] = [{ view: { kind: "overview" }, scroll: 0 }];
   let retracing = false;
 
@@ -102,7 +118,11 @@ export function createPanel(world: World, actions: PanelActions) {
   function visit(view: View) {
     const top = trail[trail.length - 1];
     if (retracing || JSON.stringify(top.view) === JSON.stringify(view)) return;
-    top.scroll = sections.inspect.scrollTop;
+    top.scroll = scrollOf(top.view);
+    if (view.kind !== "tab" && activeTab !== "inspect" && top.view.kind !== "tab") {
+      // Leaving another tab for Inspect: remember where from.
+      trail.push({ view: { kind: "tab", tab: activeTab }, scroll: sections[activeTab].scrollTop });
+    }
     trail.push({ view, scroll: 0 });
     if (trail.length > 80) trail.shift();
     queueMicrotask(() => (sections.inspect.scrollTop = 0));
@@ -110,7 +130,8 @@ export function createPanel(world: World, actions: PanelActions) {
 
   function nameOf(view: View): string {
     let name = "Overview";
-    if (view.kind === "stage") name = STAGES[view.stage] ?? "Stage";
+    if (view.kind === "tab") name = tabs.find((tab) => tab.dataset.tab === view.tab)?.textContent ?? "Back";
+    else if (view.kind === "stage") name = STAGES[view.stage] ?? "Stage";
     else if (view.kind === "outside") {
       const [, type, number] = view.id.split("-");
       name = billLabel({ type: type.toUpperCase(), number });
@@ -124,6 +145,7 @@ export function createPanel(world: World, actions: PanelActions) {
   }
 
   function open(view: View) {
+    if (view.kind === "tab") return;
     if (view.kind === "target") return actions.select(view.target);
     actions.select(null);
     if (view.kind === "stage") showStage(view.stage);
@@ -133,6 +155,13 @@ export function createPanel(world: World, actions: PanelActions) {
   function goBack() {
     if (trail.length < 2) return;
     trail.pop();
+    // Coming back to a tab: show its results again, and put Inspect back to what it held before them.
+    let returnTo: { tab: TabName; scroll: number } | undefined;
+    const marker = trail[trail.length - 1];
+    if (marker.view.kind === "tab" && trail.length > 1) {
+      returnTo = { tab: marker.view.tab, scroll: marker.scroll };
+      trail.pop();
+    }
     const { view, scroll } = trail[trail.length - 1];
     retracing = true;
     try {
@@ -140,8 +169,12 @@ export function createPanel(world: World, actions: PanelActions) {
     } finally {
       retracing = false;
     }
-    // Put the list back where it was; a committee's calendar arrives a moment after the rest.
-    const restore = () => (sections.inspect.scrollTop = scroll);
+    if (returnTo) showTab(returnTo.tab);
+    // Put the lists back where they were; a committee's calendar arrives a moment after the rest.
+    const restore = () => {
+      sections.inspect.scrollTop = scroll;
+      if (returnTo) sections[returnTo.tab].scrollTop = returnTo.scroll;
+    };
     queueMicrotask(restore);
     setTimeout(restore, 350);
   }
