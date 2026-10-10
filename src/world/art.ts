@@ -403,6 +403,38 @@ function drawTree(ctx: CanvasRenderingContext2D, x: number, y: number, random: (
   box(ctx, x + 2, y - 1, 3, 2, leafLight);
 }
 
+/** A repeating patch of woodland for everything beyond the edge of the map. */
+export function drawForest(): HTMLCanvasElement {
+  const size = 256; // a power of two, so it can tile
+  const [element, ctx] = canvas(size, size);
+  const random = rng(1789);
+  const tiles = size / TILE;
+  box(ctx, 0, 0, size, size, PALETTE.grass);
+  for (let ty = 0; ty < tiles; ty++) {
+    for (let tx = 0; tx < tiles; tx++) {
+      const px = tx * TILE;
+      const py = ty * TILE;
+      if (random() < 0.3) box(ctx, px, py, TILE, TILE, PALETTE.grassLight);
+      if (random() < 0.5) {
+        const gx = px + 2 + Math.floor(random() * 10);
+        const gy = py + 3 + Math.floor(random() * 9);
+        box(ctx, gx, gy, 1, 3, PALETTE.grassDark);
+        box(ctx, gx + 2, gy + 1, 1, 2, PALETTE.grassDark);
+      }
+    }
+  }
+  // Trees row by row, back to front, kept clear of the edges so the patch repeats without a seam.
+  for (let ty = 1; ty < tiles; ty++) {
+    for (let tx = 0; tx < tiles; tx++) {
+      if (random() < 0.42) {
+        drawTree(ctx, tx * TILE + (tx === tiles - 1 ? 0 : Math.floor(random() * 5)), ty * TILE, random);
+        tx++; // no two trees on top of each other
+      }
+    }
+  }
+  return element;
+}
+
 export function drawGround(layout: Layout): HTMLCanvasElement {
   const [element, ctx] = canvas(MAP_W * TILE, MAP_H * TILE);
   const random = rng(119);

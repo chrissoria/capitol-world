@@ -9,6 +9,7 @@ import {
   drawBadges,
   drawBelt,
   drawCrate,
+  drawForest,
   drawGround,
   drawMembers,
   drawPaper,
@@ -130,6 +131,12 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.makeTextures();
+    // Woods all round the map, far enough out to fill the widest screen.
+    const woods = 4096;
+    this.add
+      .tileSprite(-woods, -woods, MAP_W * TILE + woods * 2, MAP_H * TILE + woods * 2, "forest")
+      .setOrigin(0)
+      .setDepth(DEPTH.ground - 1);
     this.add.image(0, 0, "ground").setOrigin(0).setDepth(DEPTH.ground);
     this.makeBelts();
     this.makeSites();
@@ -143,6 +150,7 @@ export class WorldScene extends Phaser.Scene {
 
   private makeTextures() {
     this.textures.addCanvas("ground", drawGround(this.layout));
+    this.textures.addCanvas("forest", drawForest());
     const sheet = drawMembers(this.world.members);
     const texture = this.textures.addCanvas("members", sheet.canvas)!;
     for (const [id, frame] of sheet.frames) texture.add(id, 0, frame.x, frame.y, frame.w, frame.h);
