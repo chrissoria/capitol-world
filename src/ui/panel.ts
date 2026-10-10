@@ -295,6 +295,8 @@ export function createPanel(world: World, actions: PanelActions) {
     el("p", {}, "The figures are generated at random from each member's ID. They are not likenesses."),
     el("p", {}, "Click the House or the Senate to step inside. The floor plan is invented, and what the figures do there (eating, reading, talking, presiding) is ambient animation, not a record of anyone’s day. Only the bills, their locations and who carried them come from the data."),
     el("p", {}, "Bill summaries are written by an AI model and may describe an earlier version of a bill. Where a bill sits says nothing about its merit."),
+    el("h3", {}, "Music"),
+    el("p", {}, "The music is made in your browser in the style of an old game console: “Yankee Doodle” on the map and “America the Beautiful” inside the buildings, both long in the public domain. The ♪ button turns it off, and the choice is remembered."),
     el("p", { class: "note" }, "Made by Chris Soria. Not affiliated with Congress."),
   );
 

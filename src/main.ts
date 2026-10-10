@@ -1,3 +1,4 @@
+import { createMusic } from "./audio/music";
 import { loadWorld } from "./data/load";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
@@ -27,6 +28,18 @@ async function main() {
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const replayButton = $<HTMLButtonElement>("replay");
   const backButton = $<HTMLButtonElement>("back");
+  const musicButton = $<HTMLButtonElement>("music");
+  const music = createMusic();
+  const showMusic = () => {
+    musicButton.textContent = music.enabled ? "♪ On" : "♪ Off";
+    musicButton.setAttribute("aria-pressed", String(music.enabled));
+    musicButton.setAttribute("aria-label", music.enabled ? "Music is on. Turn it off" : "Music is off. Turn it on");
+  };
+  showMusic();
+  musicButton.addEventListener("click", () => {
+    music.setEnabled(!music.enabled);
+    showMusic();
+  });
   const clock = $("clock");
   let current: Target | null = null;
   let panel: ReturnType<typeof createPanel> | undefined;
@@ -48,6 +61,7 @@ async function main() {
       panel?.refresh(current);
     },
     onPlace(inside) {
+      music.setTrack(inside ? "inside" : "map");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       $("fit").textContent = inside ? "Whole building" : "Whole map";

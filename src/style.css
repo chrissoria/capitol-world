@@ -485,3 +485,8 @@ a {
 #tabs button {
   font-size: 12px;
 }
+
+#music[aria-pressed="false"] {
+  background: var(--paper-edge);
+  color: var(--muted);
+}

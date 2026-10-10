@@ -57,6 +57,12 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/world/camera.ts` pan and zoom, shared by both scenes
 - `src/ui/panel.ts` the side panel: inspector, search, filters, about
 - `src/ui/stats.ts` the Stats tab: introductions by period, party and member, and how far they got
+- `src/audio/music.ts` chiptune music synthesised with Web Audio (no audio files)
+
+The music is two public-domain tunes ("Yankee Doodle" and "America the
+Beautiful") in arrangements written for this project and played by oscillators
+in the browser, so there are no recordings to license. It starts on the first
+click, and the ♪ button turns it off.
 
 The figures are generated at random from each member's ID and are not likenesses.
 Bill summaries are machine-written. Not affiliated with Congress.
