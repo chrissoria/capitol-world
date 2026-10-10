@@ -175,12 +175,22 @@ function noteFor(site: Site): Note | undefined {
   }
 }
 
+let ended = false;
+
+/** Say that the Congress on show has finished, so the notes describe where bills ended. */
+export function describeFinished(finished: boolean) {
+  ended = finished;
+}
+
+const ENDED = " This Congress has ended, so the map shows where each bill stood on its last day. A bill that had not become law by then died with the Congress.";
+
 function fold(summary: string, notes: Note[]): HTMLElement | null {
   if (!notes.length) return null;
   const body: HTMLElement[] = [];
   for (const note of notes) {
     for (const paragraph of note.role) body.push(el("p", {}, paragraph));
-    body.push(el("p", { class: "note" }, el("strong", {}, "On this map: "), note.here));
+    const here = ended ? note.here.replace("in the last 30 days", "in this Congress") + ENDED : note.here;
+    body.push(el("p", { class: "note" }, el("strong", {}, "On this map: "), here));
   }
   return el("details", { class: "explain" }, el("summary", {}, summary), ...body);
 }

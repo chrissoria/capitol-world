@@ -3,11 +3,11 @@
 import { loadSearch } from "../data/load";
 import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
-import { billLabel } from "../data/types";
+import { billLabel, ordinal } from "../data/types";
 import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
 import { add, el, niceDate, put } from "./dom";
-import { explainSite, explainStage } from "./explain";
+import { describeFinished, explainSite, explainStage } from "./explain";
 import { createRoster } from "./roster";
 import { createStats } from "./stats";
 
@@ -55,6 +55,11 @@ function congressUrl(id: string): string {
 }
 
 export function createPanel(world: World, actions: PanelActions) {
+  // A finished Congress shows every bill where it ended, so nothing is "active" or "recent".
+  const final = Boolean(world.final);
+  const congressName = `${ordinal(world.congress)} Congress${world.years ? ` (${world.years[0]}–${world.years[1]})` : ""}`;
+  const active = final ? "" : "active ";
+  describeFinished(final);
   const members = new Map(world.members.map((member) => [member.id, member]));
   const bills = new Map(world.bills.map((bill) => [bill.id, bill]));
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("#tabs button")];
@@ -215,17 +220,19 @@ export function createPanel(world: World, actions: PanelActions) {
       return el("li", {}, button);
     });
     put(sections.inspect, 
-      el("h2", {}, "What Congress is working on"),
+      el("h2", {}, final ? `What the ${congressName} did` : "What Congress is working on"),
       el(
         "p",
         {},
-        `${world.counts.world.toLocaleString()} bills had an action in the 30 days up to ${niceDate(world.data_through)}. `,
-        "Each sheet of paper on the map is one of them, sitting where its latest action left it.",
+        final
+          ? `${world.counts.total.toLocaleString()} bills and resolutions were introduced in the ${congressName}. `
+          : `${world.counts.world.toLocaleString()} bills had an action in the 30 days up to ${niceDate(world.data_through)}. `,
+        final ? "Each one is on the map, at the place where it ended." : "Each sheet of paper on the map is one of them, sitting where its latest action left it.",
       ),
       el("p", { class: "note" }, "Click a paper or a building. The House, the Senate and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom."),
-      el("h3", {}, "Where those bills are"),
+      el("h3", {}, final ? "Where those bills ended" : "Where those bills are"),
       el("ul", { class: "list" }, ...rows),
-      el("p", { class: "note" }, `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
+      el("p", { class: "note" }, final ? "Pick a stage to list its bills." : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
     );
   }
 
@@ -255,7 +262,7 @@ export function createPanel(world: World, actions: PanelActions) {
       backButton(),
       el("div", { class: "kicker" }, "Stage"),
       el("h2", {}, STAGES[kind] ?? kind),
-      el("p", {}, `${inStage.length.toLocaleString()} active bill${inStage.length === 1 ? "" : "s"} in ${places.size} places. Pick a place to go there, or a bill to find it on the map.`),
+      el("p", {}, `${inStage.length.toLocaleString()} ${active}bill${inStage.length === 1 ? "" : "s"} in ${places.size} places. Pick a place to go there, or a bill to find it on the map.`),
       explainStage([...places.values()].map((place) => place.site).sort((a, b) => a.wing.localeCompare(b.wing))),
       el("h3", {}, "Places"),
       el("ul", { class: "list" }, ...placeRows),
@@ -283,7 +290,7 @@ export function createPanel(world: World, actions: PanelActions) {
       el("p", { class: "note" }, `${bill.cosponsors} cosponsor${bill.cosponsors === 1 ? "" : "s"} · introduced ${niceDate(bill.introduced)}`),
       bill.summary ? el("h3", {}, "Summary") : null,
       bill.summary ? el("p", {}, bill.summary) : null,
-      bill.summary ? el("p", { class: "note" }, "Written by an AI model from the bill text. It may describe an earlier version of the bill.") : null,
+      bill.summary ? el("p", { class: "note" }, world.summary_source === "crs" ? "Official summary by the Congressional Research Service, shortened." : "Written by an AI model from the bill text. It may describe an earlier version of the bill.") : null,
       el("p", {}, el("a", { href: bill.url || congressUrl(bill.id), target: "_blank", rel: "noopener" }, "Read it on Congress.gov ↗")),
     );
   }
@@ -295,9 +302,12 @@ export function createPanel(world: World, actions: PanelActions) {
       el("div", { class: "kicker" }, member.role || (member.chamber === "Senate" ? "Senator" : "Representative")),
       el("h2", {}, pin(member.party), member.name),
       el("p", {}, el("span", { class: "chip" }, partyName(member.party)), el("span", { class: "chip" }, member.chamber === "House" && member.district ? `${member.state}-${member.district}` : member.state)),
-      el("p", {}, `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this Congress, ${theirs.length} with an action in the last 30 days.`),
-      theirs.length ? el("h3", {}, "Active bills") : null,
-      el("ul", { class: "list" }, ...theirs.map((bill) => billRow(bill))),
+      el("p", {}, final
+        ? `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} in the ${congressName}.`
+        : `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this Congress, ${theirs.length} with an action in the last 30 days.`),
+      theirs.length ? el("h3", {}, final ? "Their bills" : "Active bills") : null,
+      el("ul", { class: "list" }, ...theirs.slice(0, 200).map((bill) => billRow(bill))),
+      theirs.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${theirs.length}.`) : null,
       theirs.length ? el("p", { class: "note" }, "The buildings holding these bills are outlined on the map.") : null,
       el("p", { class: "note" }, "The character is generated at random and is not a likeness. What it does inside the building is animation, not a record of the member’s day."),
     );
@@ -385,7 +395,9 @@ export function createPanel(world: World, actions: PanelActions) {
       chairButton ? el("ul", { class: "list" }, el("li", {}, chairButton)) : null,
       committee,
       site.style === "committee" ? el("h3", {}, "Bills with this committee") : null,
-      el("p", {}, here.length ? `${here.length} active bill${here.length === 1 ? "" : "s"} here.` : "No bills with an action in the last 30 days are here."),
+      el("p", {}, here.length
+        ? `${here.length.toLocaleString()} ${active}bill${here.length === 1 ? "" : "s"} ${final ? "ended" : ""} here.`.replace("  ", " ")
+        : final ? "No bills ended here." : "No bills with an action in the last 30 days are here."),
       el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${members.get(bill.sponsor)?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
       here.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${here.length}.`) : null,
     );
@@ -401,7 +413,7 @@ export function createPanel(world: World, actions: PanelActions) {
       el("div", { class: "kicker" }, billLabel({ type: type.toUpperCase(), number })),
       el("h2", {}, index.title[at]),
       el("p", {}, el("span", { class: "chip stage" }, index.statuses[index.status[at]] ?? ""), index.policy_areas[index.policy_area[at]] ? el("span", { class: "chip" }, index.policy_areas[index.policy_area[at]]) : null),
-      el("p", {}, `Last action ${niceDate(index.date[at])}. It has not moved in the last 30 days, so it is not on the map.`),
+      el("p", {}, `Last action ${niceDate(index.date[at])}. ${final ? "It is not on the map." : "It has not moved in the last 30 days, so it is not on the map."}`),
       sponsor ? el("p", {}, "Sponsor: ", pin(sponsor.party), memberLine(sponsor)) : null,
       el("p", {}, el("a", { href: congressUrl(id), target: "_blank", rel: "noopener" }, "Read it on Congress.gov ↗")),
     );
@@ -518,10 +530,14 @@ export function createPanel(world: World, actions: PanelActions) {
   });
   add(document.getElementById("about-body")!, 
     el("h2", { id: "about-title" }, "About this map"),
-    el("p", {}, "Capitol World shows where the bills of the ", `${world.congress}th`, " U.S. Congress are in the legislative process. Bills start in a hopper at the bottom and move up: to a committee, onto a calendar, to the floor, across to the other chamber, and on to the White House."),
+    el("p", {}, "Capitol World shows where the bills of the ", ordinal(world.congress), final ? " U.S. Congress ended up in the legislative process." : " U.S. Congress are in the legislative process. Bills start in a hopper at the bottom and move up: to a committee, onto a calendar, to the floor, across to the other chamber, and on to the White House."),
     el("h3", {}, "The data"),
-    el("p", {}, "Everything comes from the Congress.gov API through the public dataset ", el("a", { href: "https://huggingface.co/datasets/chrissoria/federal-bills-active", target: "_blank", rel: "noopener" }, "chrissoria/federal-bills-active"), ", refreshed each morning."),
-    el("p", {}, `Data through ${niceDate(world.data_through)}. The map shows the ${world.counts.world.toLocaleString()} bills with an action in the last 30 days; all ${world.counts.total.toLocaleString()} are searchable.`),
+    final
+      ? el("p", {}, "This Congress has ended, so its record is final. It was built once from the Bill Status bulk data that the Government Publishing Office publishes on GovInfo. The current Congress is refreshed each morning from the Congress.gov API.")
+      : el("p", {}, "Everything comes from the Congress.gov API through the public dataset ", el("a", { href: "https://huggingface.co/datasets/chrissoria/federal-bills-active", target: "_blank", rel: "noopener" }, "chrissoria/federal-bills-active"), ", refreshed each morning."),
+    final
+      ? el("p", {}, `Last action ${niceDate(world.data_through)}. All ${world.counts.total.toLocaleString()} bills and resolutions are on the map and searchable. Summaries are the official ones from the Congressional Research Service.`)
+      : el("p", {}, `Data through ${niceDate(world.data_through)}. The map shows the ${world.counts.world.toLocaleString()} bills with an action in the last 30 days; all ${world.counts.total.toLocaleString()} are searchable.`),
     world.counts.guessed_locations ? el("p", { class: "note" }, `${world.counts.guessed_locations.toLocaleString()} bills are placed from their last action alone, because their full history has not been collected yet.`) : null,
     el("h3", {}, "How to read it"),
     el("p", {}, "Teal roofs are the House side and purple roofs the Senate side. Paper with a teal band started in the House; a purple band, the Senate. A number over a legislator's head is how many active bills they sponsor."),

@@ -87,6 +87,24 @@ export interface World {
   committees: Committee[];
   bills: Bill[];
   events: MoveEvent[];
+  /** A finished Congress: every bill is on the map, at the place it ended. */
+  final?: boolean;
+  /** First and last year of a finished Congress. */
+  years?: [number, number];
+  /** "crs" when the summaries are the official ones; otherwise they are machine-written. */
+  summary_source?: string;
+}
+
+/** world/congresses.json: the finished Congresses that have been built. */
+export interface CongressList {
+  archive: { congress: number; years: [number, number]; bills: number; laws: number; data_through: string }[];
+}
+
+/** "118th", "101st". */
+export function ordinal(n: number): string {
+  const tens = n % 100;
+  const suffix = tens >= 11 && tens <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${n}${suffix}`;
 }
 
 export interface SearchIndex {

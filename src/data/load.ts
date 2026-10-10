@@ -1,8 +1,16 @@
 import type { CommitteeFile } from "./meetings";
-import type { SearchIndex, World } from "./types";
+import type { CongressList, SearchIndex, World } from "./types";
 
-const REMOTE = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
+const ROOT = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
 const BUNDLED = `${import.meta.env.BASE_URL}fixtures/`;
+
+/** A finished Congress asked for with `?congress=118`, or null for the current one. */
+export const archived: number | null = (() => {
+  const asked = Number(new URLSearchParams(location.search).get("congress"));
+  return Number.isInteger(asked) && asked > 0 ? asked : null;
+})();
+// A finished Congress is built once and kept in its own folder; it has no bundled copy.
+const REMOTE = archived ? `${ROOT}archive/${archived}/` : ROOT;
 
 export type DataSource = "live" | "bundled";
 
@@ -26,6 +34,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function fromEither<T>(file: string): Promise<{ data: T; source: DataSource }> {
+  if (archived) return { data: await fetchJson<T>(REMOTE + file), source: "live" };
   const order: DataSource[] = preferred() === "live" ? ["live", "bundled"] : ["bundled", "live"];
   let lastError: unknown;
   for (const source of order) {
@@ -39,11 +48,16 @@ async function fromEither<T>(file: string): Promise<{ data: T; source: DataSourc
 }
 
 export async function loadWorld(): Promise<{ world: World; source: DataSource }> {
-  const { data, source } = await fromEither<World>("world.json");
+  const { data, source } = await fromEither<World>(archived ? "world.json.gz" : "world.json");
   if (data.schema !== 1 || !Array.isArray(data.bills) || !Array.isArray(data.members)) {
     throw new Error("world.json is not in the expected format");
   }
   return { world: data, source };
+}
+
+/** The finished Congresses that can be opened, newest first. Empty if the list cannot be read. */
+export function loadCongresses(): Promise<CongressList["archive"]> {
+  return fetchJson<CongressList>(`${ROOT}congresses.json`).then((list) => list.archive ?? [], () => []);
 }
 
 let committeeFile: Promise<CommitteeFile> | undefined;

@@ -3,7 +3,7 @@
 // the search index, so the choices below can be combined freely.
 
 import { loadSearch } from "../data/load";
-import type { SearchIndex, World } from "../data/types";
+import { ordinal, type SearchIndex, type World } from "../data/types";
 import { add, el, niceDate, put } from "./dom";
 
 const PERIODS: [string, string, number][] = [
@@ -75,7 +75,12 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     node.value = value;
     return node;
   };
-  const period = select("s-period", PERIODS.map(([key, label]) => [key, label] as [string, string]), "month");
+  // A finished Congress has no "last 30 days": offer the whole of it and each of its years.
+  const years = world.final && world.years ? [world.years[0], world.years[0] + 1] : [];
+  const periods: [string, string][] = world.final
+    ? [["all", "The whole Congress"], ...years.map((year) => [`y${year}`, String(year)] as [string, string])]
+    : PERIODS.map(([key, label]) => [key, label] as [string, string]);
+  const period = select("s-period", periods, world.final ? "all" : "month");
   const kind = select("s-kind", KINDS, "law");
   const chamber = select("s-chamber", [["", "Both chambers"], ["House", "House"], ["Senate", "Senate"]], "");
   const body = el("div", {});
@@ -126,7 +131,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     );
   }
 
-  function chart(chosen: Row[], since: string, days: number) {
+  function chart(chosen: Row[], since: string, days: number, latest: string) {
     if (days === 1 || !chosen.length) return null;
     // Days for the short periods, months for the long ones.
     const byMonth = days === 0 || days > 60;
@@ -170,11 +175,13 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     if (!rows.length) {
       return put(body, el("p", { class: "note" }, "These statistics need a newer copy of the data. They will appear after the next daily update."));
     }
-    const days = PERIODS.find(([key]) => key === period.value)![2];
+    const year = period.value.startsWith("y") ? period.value.slice(1) : "";
+    const days = PERIODS.find(([key]) => key === period.value)?.[2] ?? 0;
     const since = days ? daysBefore(latest, days - 1) : "";
     const chosen = rows.filter(
       (row) =>
         row.introduced >= since &&
+        row.introduced.startsWith(year) &&
         row.introduced !== "" &&
         (kind.value === "all" || row.law === (kind.value === "law")) &&
         (!chamber.value || row.house === (chamber.value === "House")),
@@ -195,7 +202,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     }
 
     const noun = kind.value === "law" ? "bills and joint resolutions" : kind.value === "res" ? "resolutions" : "measures";
-    const span = days === 1 ? `on ${niceDate(latest)}` : days ? `from ${niceDate(since)} to ${niceDate(latest)}` : `since ${niceDate("2025-01-03")}`;
+    const span = days === 1 ? `on ${niceDate(latest)}` : days ? `from ${niceDate(since)} to ${niceDate(latest)}` : year ? `in ${year}` : world.final ? `in the ${ordinal(world.congress)} Congress` : `since ${niceDate("2025-01-03")}`;
     const canBecomeLaw = kind.value !== "res";
     const passedLabel = kind.value === "res" ? "Agreed to by a chamber" : "Passed at least one chamber";
     const votedNote = all.voted ? ` · ${percent(all.passed, all.voted)} of those that got a floor vote` : "";
@@ -242,7 +249,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       body,
       el("div", { class: "stat-big" }, all.introduced.toLocaleString()),
       el("p", {}, `${noun} introduced ${span}${chamber.value ? ` in the ${chamber.value}` : ""}.`),
-      all.introduced ? el("h3", {}, "How far they have got") : null,
+      all.introduced ? el("h3", {}, world.final ? "How far they got" : "How far they have got") : null,
       all.introduced
         ? el(
             "ul",
@@ -254,10 +261,10 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
             canBecomeLaw ? bar("Became law", all.law, all.introduced) : null,
           )
         : null,
-      all.introduced ? el("p", { class: "note" }, "These follow the same measures counted above, so recent ones have had less time to move. A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.") : null,
+      all.introduced ? el("p", { class: "note" }, `${world.final ? "This Congress has ended, so these are final." : "These follow the same measures counted above, so recent ones have had less time to move."} A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.`) : null,
       partyRows.length ? el("h3", {}, "By sponsor’s party") : null,
       el("ul", { class: "list" }, ...partyRows),
-      chart(chosen, since, days),
+      chart(chosen, since, days, year ? chosen.reduce((max, row) => (row.introduced > max ? row.introduced : max), "") : latest),
       sponsorRows.length ? el("h3", {}, "Who introduced the most") : null,
       el("ul", { class: "list" }, ...sponsorRows),
       areaRows.length ? el("h3", {}, "Most common policy areas") : null,

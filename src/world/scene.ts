@@ -495,7 +495,7 @@ export class WorldScene extends Phaser.Scene {
           },
         });
         const note = !meeting
-          ? "not meeting right now"
+          ? this.world.final ? "this Congress has ended" : "not meeting right now"
           : meetingId
             ? `re-staging the ${meeting.type.toLowerCase()} of ${meetingTime(meeting).split(",").slice(0, 2).join(",")}`
             : "in session now";

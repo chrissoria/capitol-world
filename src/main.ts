@@ -1,5 +1,6 @@
 import { createMusic } from "./audio/music";
-import { loadCommittees, loadWorld } from "./data/load";
+import { archived, loadCommittees, loadCongresses, loadWorld } from "./data/load";
+import { ordinal } from "./data/types";
 import { createCalendar } from "./ui/calendar";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
@@ -17,14 +18,39 @@ async function main() {
   try {
     loaded = await loadWorld();
   } catch (error) {
-    loading.textContent = "The map data could not be loaded. Please try again later.";
+    loading.textContent = archived
+      ? `The ${ordinal(archived)} Congress could not be loaded. `
+      : "The map data could not be loaded. Please try again later.";
+    if (archived) loading.append(Object.assign(document.createElement("a"), { href: location.pathname, textContent: "Open the current Congress" }));
     console.error(error);
     return;
   }
   const { world, source } = loaded;
+  // A link to a bill of another Congress opens that Congress.
+  const linked = /^#bill=(\d+)-/.exec(decodeURIComponent(location.hash));
+  if (linked && Number(linked[1]) !== world.congress) {
+    location.replace(`${location.pathname}?congress=${linked[1]}${location.hash}`);
+    return;
+  }
   const through = new Date(`${world.data_through}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  const stamp = `Data through ${through}${source === "bundled" ? " · bundled sample" : ""}`;
+  const stamp = world.final ? `Final record · last action ${through}` : `Data through ${through}${source === "bundled" ? " · bundled sample" : ""}`;
   $("stamp").textContent = stamp;
+  const replayLabel = world.final ? "▶ Replay the last day" : "▶ Replay last day";
+  const skipLabel = world.final ? "■ Skip to the end" : "■ Skip to today";
+
+  // The picker lists the finished Congresses that have been built; choosing one reloads the page.
+  const picker = $<HTMLSelectElement>("congress");
+  void loadCongresses().then((list) => {
+    if (!list.length) return;
+    const current = list.reduce((max, item) => Math.max(max, item.congress), 0) + 1;
+    picker.append(new Option(`${ordinal(current)} Congress · ${1789 + 2 * (current - 1)}–now`, ""));
+    for (const item of list) picker.append(new Option(`${ordinal(item.congress)} Congress · ${item.years[0]}–${item.years[1]}`, String(item.congress)));
+    picker.value = archived ? String(archived) : "";
+    picker.hidden = false;
+  });
+  picker.addEventListener("change", () => {
+    location.assign(picker.value ? `${location.pathname}?congress=${picker.value}` : location.pathname);
+  });
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const replayButton = $<HTMLButtonElement>("replay");
@@ -56,7 +82,7 @@ async function main() {
     },
     onClock(label, progress) {
       clock.hidden = label === null;
-      replayButton.textContent = label === null ? "▶ Replay last day" : "■ Skip to today";
+      replayButton.textContent = label === null ? replayLabel : skipLabel;
       if (label !== null) {
         $("clock-day").textContent = label;
         (clock.querySelector("i") as HTMLElement).style.width = `${Math.round(progress * 100)}%`;

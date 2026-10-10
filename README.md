@@ -25,6 +25,11 @@ The Stats tab counts every measure of the Congress by the date it was
 introduced (the latest day, 7 days, 30 days, 12 months or the whole Congress)
 and shows how far those measures have got, split by the sponsor's party.
 
+The picker under the title opens a finished Congress, back to the 113th
+(2013–2015). A finished Congress shows every one of its bills at the place it
+ended, with the official Congressional Research Service summaries; `?congress=118`
+in the URL does the same, and a link to a bill opens the Congress it belongs to.
+
 Live at <https://christophersoria.com/capitol-world/>.
 
 ## Data
@@ -37,7 +42,11 @@ public dataset
   30 days and where each sits, and the moves of the last 7 days
 - `world/search.json.gz`: every bill of the Congress, for the search box
 
-Both are built by `build_world_snapshot.py` in
+- `world/congresses.json` and `world/archive/<congress>/`: the finished
+  Congresses, built once by `build_congress_archive.py` from GovInfo's Bill
+  Status bulk data and loaded only when one is picked
+
+The first two are built by `build_world_snapshot.py` in
 [cat-pol-datasets](https://github.com/chrissoria/cat-pol-datasets) from the
 Congress.gov API. Committee chairs and chamber leaders come from the
 public-domain [congress-legislators](https://github.com/unitedstates/congress-legislators)

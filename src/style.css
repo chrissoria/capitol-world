@@ -87,6 +87,29 @@ body {
   color: var(--muted);
 }
 
+#congress {
+  display: block;
+  margin: 3px 0;
+  padding: 2px 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--ink);
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+  max-width: 100%;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 #hud-buttons {
   display: flex;
   gap: 6px;
