@@ -135,7 +135,8 @@ async function main() {
     },
     onPlace(inside) {
       calendar.close();
-      music.setTrack(inside ? "inside" : "map");
+      // The chambers have their own tune, and so do the committee rooms.
+      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" ? "inside" : "committee");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       $("fit").textContent = inside ? "Whole building" : "Whole map";
@@ -153,6 +154,7 @@ async function main() {
         stage: (code, meetingId) => scene.stage(code, meetingId),
         whereIs: (id) => scene.whereIs(id),
         lookAt: (key) => scene.lookAt(key),
+        learning: (open) => music.setTrack(open ? "library" : "map"),
       });
       replayButton.hidden = !scene.hasEvents;
       const initial = targetFromHash();

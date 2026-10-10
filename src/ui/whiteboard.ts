@@ -4,6 +4,7 @@
 // and how to split it.
 
 import { ordinal } from "../data/types";
+import { drawFigures } from "../world/art";
 import { el } from "./dom";
 
 export interface BoardRow {
@@ -72,7 +73,7 @@ interface Bar {
   color: string;
 }
 
-export function createWhiteboard(root: HTMLElement, onClose: () => void) {
+export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) => void) {
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pick = <T extends string>(id: string, options: [T, string][]) => {
     const node = el("select", { id, "aria-label": id });
@@ -84,7 +85,66 @@ export function createWhiteboard(root: HTMLElement, onClose: () => void) {
   const who = pick("wb-who", WHO);
   const sheet = el("canvas", { role: "img" });
   const close = el("button", { type: "button", class: "wb-close" }, "← Back to the map");
+  // The room: pictures on the wall, a plant, and a teacher at the left of the board who does the drawing.
+  const teacher = el("canvas", { class: "wb-teacher", width: "28", height: "26", "aria-hidden": "true" });
+  const plant = el("canvas", { class: "wb-plant", width: "14", height: "22", "aria-hidden": "true" });
+  const figure = drawFigures([{ key: "teacher", look: { seed: "the-teacher", party: null } }]);
+  const from = figure.frames.get("teacher")!;
+  const sleeve = (() => {
+    const [r, g, b] = figure.canvas.getContext("2d")!.getImageData(from.x + 8, from.y + 16, 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  })();
+  /** 0: arms down. 1 and 2: the marker on the board, high and low. */
+  function pose(arm: 0 | 1 | 2) {
+    const g = teacher.getContext("2d")!;
+    g.clearRect(0, 0, teacher.width, teacher.height);
+    g.drawImage(figure.canvas, from.x, from.y, from.w, from.h, 2, 2, from.w, from.h);
+    if (!arm) return;
+    const rise = arm === 1 ? 1 : 0.45;
+    for (let i = 0; i < 9; i++) {
+      g.fillStyle = PEN.black;
+      g.fillRect(13 + i, 14 - Math.round(i * rise), 3, 3);
+    }
+    for (let i = 0; i < 9; i++) {
+      g.fillStyle = sleeve;
+      g.fillRect(14 + i, 15 - Math.round(i * rise), 1, 1);
+    }
+    const tip = 15 - Math.round(8 * rise);
+    g.fillStyle = PEN.black;
+    g.fillRect(23, tip - 3, 4, 4);
+    g.fillStyle = PEN.R;
+    g.fillRect(24, tip - 2, 2, 2);
+  }
+  {
+    const g = plant.getContext("2d")!;
+    const leaf = (x: number, y: number, w: number, h: number, color = "#3f8f4a") => {
+      g.fillStyle = color;
+      g.fillRect(x, y, w, h);
+    };
+    leaf(6, 2, 2, 12, "#2f6f3a");
+    leaf(2, 4, 4, 3);
+    leaf(8, 2, 4, 3);
+    leaf(1, 9, 5, 3);
+    leaf(8, 7, 5, 3);
+    leaf(5, 0, 3, 3, "#58a85f");
+    leaf(3, 5, 2, 1, "#58a85f");
+    leaf(9, 8, 2, 1, "#58a85f");
+    leaf(2, 14, 10, 2, "#8a4b2a");
+    leaf(3, 16, 8, 6, "#b9643a");
+  }
+  pose(0);
+  let scribble = 0;
+  const teach = (on: boolean) => {
+    clearInterval(scribble);
+    if (!on) return pose(1); // finished: pointing at the board
+    let high = true;
+    scribble = window.setInterval(() => pose((high = !high) ? 1 : 2), 170);
+  };
+
   root.replaceChildren(
+    el("div", { class: "wb-pics", "aria-hidden": "true" }, el("i", { class: "land" }), el("i", { class: "flag" }), el("i", { class: "seal" }), el("i", { class: "land dusk" })),
+    teacher,
+    plant,
     el("div", { class: "wb-frame" },
       el("div", { class: "wb-bar" }, measure, across, who, close),
       sheet,
@@ -262,7 +322,8 @@ export function createWhiteboard(root: HTMLElement, onClose: () => void) {
     sheet.setAttribute("aria-label", `${notes[0]?.text ?? "Chart"}. ${summary}`);
     const total = strokes.reduce((sum, stroke) => sum + stroke.length, 0);
     const started = performance.now();
-    const duration = animate && !still ? Math.min(2200, 500 + total * 0.35) : 0;
+    const duration = animate && !still ? Math.min(2600, 700 + total * 0.4) : 0;
+    teach(duration > 0);
     const paint = (now: number) => {
       const reach = duration ? Math.min(1, (now - started) / duration) * total : total;
       ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
@@ -297,12 +358,17 @@ export function createWhiteboard(root: HTMLElement, onClose: () => void) {
       }
       for (const note of notes) {
         if (note.after > done) continue;
-        ctx.font = `${note.size}px ${HAND}`;
+        // A line that would run off the board is written smaller.
+        const room = note.align === "left" ? box.width - note.x - 10 : note.align === "right" ? note.x - 4 : Infinity;
+        let size = note.size;
+        ctx.font = `${size}px ${HAND}`;
+        while (size > 9 && ctx.measureText(note.text).width > room) ctx.font = `${--size}px ${HAND}`;
         ctx.textAlign = note.align;
         ctx.fillStyle = note.color;
         ctx.fillText(note.text, note.x, note.y);
       }
       if (reach < total) frame = requestAnimationFrame(paint);
+      else teach(false);
     };
     paint(started);
   }
@@ -313,7 +379,8 @@ export function createWhiteboard(root: HTMLElement, onClose: () => void) {
     if (root.hidden) return;
     root.hidden = true;
     cancelAnimationFrame(frame);
-    onClose();
+    clearInterval(scribble);
+    onChange(false);
   };
   close.addEventListener("click", shut);
   // Escape closes the board before anything else hears it. The listener goes when the page is rebuilt.
@@ -338,7 +405,10 @@ export function createWhiteboard(root: HTMLElement, onClose: () => void) {
       if (spec.measure) measure.value = spec.measure;
       if (spec.across) across.value = spec.across;
       if (spec.who !== undefined) who.value = spec.who;
-      root.hidden = false;
+      if (root.hidden) {
+        root.hidden = false;
+        onChange(true);
+      }
       draw();
     },
     /** Draw again because the measures being counted have changed. */

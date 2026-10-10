@@ -964,13 +964,18 @@ label.check input {
   margin: 0;
 }
 
-/* The whiteboard in the Library of Congress. */
+/* The whiteboard in the Library of Congress: a room with a teacher at the board. */
 #whiteboard {
   position: absolute;
   inset: 0;
-  display: grid;
-  padding: 12px;
-  background: #cfc3a0 repeating-linear-gradient(90deg, rgba(46, 42, 68, 0.06) 0 2px, transparent 2px 28px);
+  overflow: hidden;
+  /* The teacher and the plant grow with the room, and the board starts beside the teacher. */
+  container-type: size;
+  --teacher: min(clamp(104px, 40cqh, 250px), 27cqw);
+  background:
+    linear-gradient(to top, #8a5d36 0 30px, #6b4a2f 30px 34px, #b9a777 34px 40px, transparent 40px),
+    repeating-linear-gradient(90deg, rgba(46, 42, 68, 0.06) 0 2px, transparent 2px 28px),
+    #d9cfae;
 }
 
 #whiteboard[hidden] {
@@ -978,15 +983,75 @@ label.check input {
 }
 
 .wb-frame {
-  position: relative;
+  position: absolute;
+  left: 104px;
+  left: calc(var(--teacher) * 0.9);
+  right: clamp(14px, 8%, 64px);
+  top: 50px;
+  bottom: 46px;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  min-height: 0;
   background: #fdfdfb;
   border: 6px solid var(--ink);
   outline: 4px solid #b9c0cc;
   outline-offset: -10px;
-  box-shadow: 8px 8px 0 rgba(46, 42, 68, 0.45);
+  box-shadow: 6px 6px 0 rgba(46, 42, 68, 0.35);
+}
+
+.wb-teacher {
+  position: absolute;
+  left: 2px;
+  bottom: 22px;
+  height: var(--teacher);
+  aspect-ratio: 28 / 26;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.wb-plant {
+  position: absolute;
+  right: 4px;
+  bottom: 24px;
+  height: clamp(66px, 24cqh, 150px);
+  aspect-ratio: 14 / 22;
+  image-rendering: pixelated;
+  z-index: 1;
+}
+
+.wb-pics {
+  position: absolute;
+  top: 8px;
+  left: calc(var(--teacher) * 0.9);
+  right: clamp(14px, 8%, 64px);
+  height: 34px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.wb-pics i {
+  width: 44px;
+  height: 30px;
+  box-sizing: border-box;
+  border: 3px solid var(--ink);
+  outline: 2px solid #b98452;
+  outline-offset: -5px;
+  background: linear-gradient(to bottom, #a8dcff 0 55%, #5fae55 55%);
+}
+
+.wb-pics i.dusk {
+  background: linear-gradient(to bottom, #f2b36b 0 45%, #8f5fb0 45% 60%, #48577a 60%);
+}
+
+.wb-pics i.flag {
+  background: linear-gradient(to right, #3a6fd8 0 40%, transparent 40%), repeating-linear-gradient(to bottom, #d8433b 0 4px, #fff 4px 8px);
+}
+
+.wb-pics i.seal {
+  width: 30px;
+  border-radius: 50%;
+  outline: none;
+  background: radial-gradient(circle, #e0aa3e 0 35%, #2f9e8f 36% 60%, #f4ecd6 61%);
 }
 
 .wb-bar {
@@ -1015,6 +1080,7 @@ label.check input {
 .wb-frame canvas {
   width: 100%;
   height: 100%;
+  display: block;
   min-height: 0;
   padding: 0 8px;
   box-sizing: border-box;
@@ -1059,4 +1125,17 @@ label.check input {
 .pick:focus-visible {
   background: rgba(224, 170, 62, 0.22);
   outline: none;
+}
+
+@container (max-width: 480px) {
+  .wb-bar {
+    padding: 10px 10px 2px;
+    gap: 4px;
+  }
+
+  .wb-bar select,
+  .wb-close {
+    font-size: 11px;
+    padding: 2px 4px;
+  }
 }

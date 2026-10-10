@@ -1,9 +1,11 @@
 // Chiptune background music, synthesised in the browser: no audio files.
-// The tunes are in the public domain ("Yankee Doodle", traditional; "America the
-// Beautiful", Samuel A. Ward, 1882) and the arrangements and bridge were written
-// for this project, so there is nothing to license.
+// The map's tune was written for this project. The others are in the public
+// domain ("Yankee Doodle" and "Shenandoah", traditional; "America the Beautiful",
+// Samuel A. Ward, 1882) in arrangements written for this project, so there is
+// nothing to license.
 
-export type TrackName = "map" | "inside";
+/** The map, a committee room, a chamber, and the whiteboard in the Library of Congress. */
+export type TrackName = "map" | "committee" | "inside" | "library";
 
 type Wave = "pulse" | "square" | "triangle";
 
@@ -93,7 +95,82 @@ function rolling(chords: string[]): { bass: string; harmony: string } {
   return { bass: bass.join(" "), harmony: harmony.join(" ") };
 }
 
+/** A shuffle: one chord per bar of four beats, each beat six units long so that it can swing (4 + 2). */
+function shuffle(chords: string[]): { bass: string; harmony: string; drums: string } {
+  const bass: string[] = [];
+  const harmony: string[] = [];
+  const drums: string[] = [];
+  for (const name of chords) {
+    const [root, third, fifth] = CHORDS[name];
+    bass.push(`${low(root)}/4 -/2 ${low(fifth)}/4 -/2 ${low(root)}/4 -/2 ${low(fifth)}/4 ${low(fifth)}/2`);
+    const stab = `-/4 ${above(third, root, 3)}+${above(fifth, root, 3)}/2`;
+    harmony.push(`${stab} ${stab} ${stab} ${stab}`);
+    drums.push("k/4 h/2 s/4 h/2 k/4 h/2 s/4 h/2");
+  }
+  return { bass: bass.join(" "), harmony: harmony.join(" "), drums: drums.join(" ") };
+}
+
 function buildMap(): Song {
+  // An easygoing twelve-bar shuffle in C, written for this project: two choruses, the
+  // second answering the first. Twenty-four units to the bar.
+  const first = `
+    E5/4 G5/2 A5/4 G5/2 E5/6 -/6          E5/4 G5/2 A5/4 C6/2 A5/6 G5/6
+    E5/4 G5/2 A5/4 G5/2 E5/4 D5/2 C5/6    C5/12 -/6 G4/4 A4/2
+    C5/4 A4/2 C5/4 D5/2 F5/6 -/6          F5/4 D5/2 C5/4 A4/2 C5/6 A4/6
+    E5/4 G5/2 A5/4 G5/2 E5/4 D5/2 C5/6    C5/12 -/6 E5/4 G5/2
+    B5/6 A5/4 G5/2 D5/6 G5/6              A5/6 G5/4 F5/2 C5/6 F5/6
+    E5/4 G5/2 E5/4 D5/2 C5/4 A4/2 C5/6    C5/6 -/6 G4/4 A4/2 B4/4 D5/2`;
+  const second = `
+    G5/6 E5/4 G5/2 A5/6 G5/6              G5/6 E5/4 D5/2 C5/12
+    G5/6 E5/4 G5/2 A5/4 C6/2 A5/6         G5/12 -/12
+    A5/6 F5/4 A5/2 C6/6 A5/6              A5/6 F5/4 D5/2 C5/12
+    G5/6 E5/4 G5/2 A5/4 G5/2 E5/6         C5/12 -/6 E5/4 G5/2
+    D6/6 B5/4 G5/2 B5/6 D6/6              C6/6 A5/4 F5/2 A5/6 C6/6
+    G5/4 E5/2 G5/4 E5/2 D5/4 E5/2 C5/6    C5/12 -/12`;
+  const blues = "C C C C F F C C G F C G".split(" ");
+  const backing = shuffle([...blues, ...blues]);
+  const lead = parse(`${first} ${second}`);
+  return {
+    bpm: 150, // a unit is a sixth of a beat here, so this is about 100 beats a minute
+    length: lead.length,
+    voices: {
+      lead: { wave: "pulse", gain: 0.27, gate: 0.8 },
+      harmony: { wave: "square", gain: 0.07, gate: 0.55 },
+      bass: { wave: "triangle", gain: 0.5, gate: 0.85 },
+    },
+    lead: lead.notes,
+    harmony: parse(backing.harmony).notes,
+    bass: parse(backing.bass).notes,
+    drums: parse(backing.drums).notes,
+  };
+}
+
+function buildLibrary(): Song {
+  // Shenandoah in C, slowly, in 4/4: sixteen sixteenths to the bar, with a bar's rest to breathe.
+  const tune = `
+    -/12 G4/4               C5/2 C5/2 C5/12          D5/2 E5/2 F5/4 A5/4 G5/4   G5/8 C6/4 B5/4
+    A5/6 G5/2 A5/2 G5/2 E5/4   G5/12 G5/4            A5/2 A5/2 A5/12            E5/2 G5/2 E5/4 D5/4 C5/4
+    C5/8 -/4 D5/4           E5/8 C5/4 E5/4           A5/4 G5/12                 -/8 C5/4 D5/4
+    E5/8 C5/4 D5/4          C5/16`;
+  const chords = "C C  C C  C F  C F  F C  C C  F F  C G  C C  C C  F C  C C  C G  C C".split(/\s+/);
+  const backing = rolling(chords);
+  const lead = parse(tune);
+  return {
+    bpm: 70,
+    length: lead.length,
+    voices: {
+      lead: { wave: "triangle", gain: 0.34, gate: 0.96 },
+      harmony: { wave: "triangle", gain: 0.14, gate: 0.9 },
+      bass: { wave: "triangle", gain: 0.3, gate: 0.97 },
+    },
+    lead: lead.notes,
+    harmony: parse(backing.harmony).notes,
+    bass: parse(backing.bass).notes,
+    drums: [],
+  };
+}
+
+function buildCommittee(): Song {
   // Yankee Doodle in C, in 2/4: eight sixteenths to the bar.
   const tune = `
     C5/2 C5/2 D5/2 E5/2   C5/2 E5/2 D5/2 G4/2   C5/2 C5/2 D5/2 E5/2   C5/4 B4/4
@@ -169,7 +246,7 @@ function buildInside(): Song {
   };
 }
 
-const SONGS: Record<TrackName, () => Song> = { map: buildMap, inside: buildInside };
+const SONGS: Record<TrackName, () => Song> = { map: buildMap, committee: buildCommittee, inside: buildInside, library: buildLibrary };
 const VOLUME = 0.22;
 const LOOKAHEAD = 0.25; // seconds of notes kept queued
 const STORAGE_KEY = "capitol-world-music";

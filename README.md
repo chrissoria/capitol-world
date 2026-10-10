@@ -38,7 +38,7 @@ which 96 in 100 bills of the last six Congresses never moved again.
 
 Search looks through every Congress, and the Stats tab takes any run of them,
 from one Congress to all of them. The Stats tab is also a building: the Library
-of Congress, where a whiteboard draws any of its figures as a chart, stroke by
+of Congress, where a teacher at a whiteboard draws any of its figures as a chart, stroke by
 stroke, and the chart can be changed on the board (by party, over time, by
 Congress, by policy area). A few small objects on the lawns (a ballot
 box, a shutdown barricade, a server rack) place each Congress in its years;
@@ -95,9 +95,10 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/ui/whiteboard.ts` the whiteboard in the Library of Congress: charts drawn with marker strokes
 - `src/audio/music.ts` chiptune music synthesised with Web Audio (no audio files)
 
-The music is two public-domain tunes ("Yankee Doodle" and "America the
-Beautiful") in arrangements written for this project and played by oscillators
-in the browser, so there are no recordings to license. It starts on the first
+The music is played by oscillators in the browser, so there are no recordings
+to license. The map has a shuffle written for this project; the committee rooms
+("Yankee Doodle"), the chambers ("America the Beautiful") and the library
+("Shenandoah") have public-domain tunes in arrangements written for it. It starts on the first
 click, and the ♪ button turns it off.
 
 The figures are generated at random from each member's ID and are not likenesses.
