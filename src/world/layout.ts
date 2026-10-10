@@ -31,7 +31,7 @@ export type SiteStyle =
   | "whitehouse"
   | "archive"
   | "hall"
-  | "bin";
+  | "memorial";
 
 export interface Site {
   key: string;
@@ -97,7 +97,7 @@ export function buildLayout(committees: Committee[]): Layout {
   add(site("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
   add(site("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
   add(site("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
-  add(site("vetoed", "bin", "Veto Bin", "Vetoed", "Center", { x: 70, y: 7, w: 6, h: 4 }));
+  add(site("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", { x: 130, y: 3, w: 16, h: 8 }));
   add(site("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
 
   const houseChamber: Rect = { x: 12, y: 17, w: 60, h: 27 };
@@ -181,7 +181,8 @@ export function siteKeyFor(loc: string | null, sites: Map<string, Site>, fallbac
     if (sites.has(`committee:${code}`)) return `committee:${code}`;
     return `referral_desk:${chamber}`;
   }
-  if (["president", "law", "vetoed", "adopted", "conference"].includes(kind)) return kind;
+  if (kind === "vetoed") return "memorial"; // a vetoed bill is laid at the memorial
+  if (["president", "law", "adopted", "conference"].includes(kind)) return kind;
   const key = `${kind}:${chamber}`;
   return sites.has(key) ? key : `referral_desk:${chamber}`;
 }

@@ -93,7 +93,7 @@ function roofColors(entry: Site): [string, string] {
       return [PALETTE.orange, PALETTE.orangeDark];
     case "conference":
       return [PALETTE.slate, PALETTE.slateDark];
-    case "bin":
+    case "memorial":
       return [PALETTE.steel, PALETTE.steelDark];
     default:
       if (entry.wing === "Senate") return [PALETTE.senate, PALETTE.senateDark];
@@ -124,7 +124,7 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     framed(ctx, wx, wallTop, 10, 9, PALETTE.window);
     box(ctx, wx + 4, wallTop + 1, 1, 7, PALETTE.ink);
   }
-  if (entry.style === "archive" || entry.style === "hall") {
+  if (entry.style === "archive" || entry.style === "hall" || entry.style === "memorial") {
     for (let cx = x + 6; cx < x + w - 6; cx += 14) {
       if (cx + 4 > doorX - 2 && cx < doorX + doorW + 2) continue;
       framed(ctx, cx, y + roofH - 2, 5, h - roofH + 2, PALETTE.white);
@@ -247,12 +247,6 @@ function drawWhiteHouse(ctx: CanvasRenderingContext2D, entry: Site) {
 
 function drawSmall(ctx: CanvasRenderingContext2D, entry: Site) {
   const { x, y, w, h } = scale(entry.rect);
-  if (entry.style === "bin") {
-    framed(ctx, x + 8, y + 14, w - 16, h - 14, PALETTE.steel);
-    framed(ctx, x + 4, y + 8, w - 8, 8, PALETTE.steelDark);
-    for (let bx = x + 16; bx < x + w - 14; bx += 10) box(ctx, bx, y + 22, 2, h - 28, PALETTE.steelDark);
-    return;
-  }
   if (entry.style === "hopper") {
     // A wooden hopper box with a funnel on top.
     framed(ctx, x + 8, y + 26, w - 16, h - 26, PALETTE.wood);
@@ -376,6 +370,28 @@ function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   for (let step = 0; step < 3; step++) {
     framed(ctx, px - 10 - step * 6, y + h - 14 + step * 5, porticoW + 20 + step * 12, 6, step % 2 ? PALETTE.stone : PALETTE.white);
   }
+}
+
+/** A grey hall with a flame that is kept burning and a wreath by the door. */
+function drawMemorial(ctx: CanvasRenderingContext2D, entry: Site) {
+  drawRoofed(ctx, entry);
+  const { x, y, w, h } = scale(entry.rect);
+  const mid = x + Math.round(w / 2);
+  // The flame, in a bowl on the roof.
+  framed(ctx, mid - 6, y - 4, 12, 5, PALETTE.stone);
+  box(ctx, mid - 3, y - 12, 6, 8, PALETTE.orange);
+  box(ctx, mid - 2, y - 15, 4, 5, PALETTE.yellow);
+  box(ctx, mid - 1, y - 17, 2, 3, PALETTE.yellow);
+  box(ctx, mid - 1, y - 9, 2, 4, PALETTE.white);
+  // Wreaths either side of the door.
+  for (const wx of [mid - 22, mid + 14]) {
+    box(ctx, wx, y + h - 13, 8, 8, PALETTE.ink);
+    box(ctx, wx + 1, y + h - 12, 6, 6, "#3f8f4a");
+    box(ctx, wx + 3, y + h - 10, 2, 2, PALETTE.wall);
+    box(ctx, wx + 3, y + h - 13, 2, 2, PALETTE.partyR);
+  }
+  // A black band under the eaves.
+  box(ctx, x + 1, y + Math.round(h * 0.56) - 1, w - 2, 2, PALETTE.ink);
 }
 
 function drawConference(ctx: CanvasRenderingContext2D, entry: Site) {
@@ -524,7 +540,8 @@ export function drawGround(layout: Layout): HTMLCanvasElement {
     if (entry.style === "chamber") drawChamber(ctx, entry);
     else if (entry.style === "conference") drawConference(ctx, entry);
     else if (entry.style === "whitehouse") drawWhiteHouse(ctx, entry);
-    else if (["inbox", "desk", "hopper", "bin"].includes(entry.style)) drawSmall(ctx, entry);
+    else if (entry.style === "memorial") drawMemorial(ctx, entry);
+    else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }
 

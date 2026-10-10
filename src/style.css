@@ -927,3 +927,39 @@ button.quiet:active {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+
+.pair {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.pair select {
+  flex: 1;
+  min-width: 0;
+}
+
+.plain-row {
+  padding: 6px 8px;
+}
+
+.plain-row .row-sub {
+  display: block;
+}
+
+label.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: normal;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+label.check input {
+  width: auto;
+  margin: 0;
+}

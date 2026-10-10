@@ -1,6 +1,6 @@
 // The side panel: everything on the map is also reachable here with a keyboard.
 
-import { loadSearch } from "../data/load";
+import { loadCongressLine, loadSearch, loadSearchOf } from "../data/load";
 import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel, ordinal } from "../data/types";
@@ -25,6 +25,16 @@ export const STAGES: Record<string, string> = {
   adopted: "Resolution adopted",
 };
 const STAGE_ORDER = Object.keys(STAGES);
+/** Why a bill is dead. The keys are written by build_world_snapshot.py. */
+export const FATES: Record<string, { name: string; how: string }> = {
+  v: { name: "Vetoed", how: "The President returned these without signing them, and Congress did not override the veto." },
+  f: { name: "Lost a floor vote", how: "The latest action on each of these is a vote it lost: a passage vote that failed, a motion that was rejected, or a vote to end debate that fell short. A chamber can vote again, so a few come back." },
+  s: { name: "No action in a year", how: "Nothing has happened to these for a year or more, so they are presumed dead. In the six Congresses before this one, 96 in 100 such bills never moved again. One that does move leaves this list." },
+  c: { name: "Died in committee", how: "These were sent to a committee and were still there when the Congress ended." },
+  w: { name: "Died waiting for a floor vote", how: "A committee sent these on, or they were placed on a calendar, but the chamber never voted on them before the Congress ended." },
+  o: { name: "Died in the other chamber", how: "One chamber passed these and the other did not before the Congress ended." },
+  b: { name: "Passed both chambers, never became law", how: "Both chambers passed some version of these, but they did not agree on one text, or it was not signed, before the Congress ended." },
+};
 const SLUGS: Record<string, string> = {
   hr: "house-bill",
   s: "senate-bill",
@@ -111,6 +121,7 @@ export function createPanel(world: World, actions: PanelActions) {
   type View =
     | { kind: "overview" }
     | { kind: "stage"; stage: string }
+    | { kind: "cause"; cause: string }
     | { kind: "target"; target: Target }
     | { kind: "outside"; id: string }
     | { kind: "tab"; tab: TabName };
@@ -137,6 +148,7 @@ export function createPanel(world: World, actions: PanelActions) {
     let name = "Overview";
     if (view.kind === "tab") name = tabs.find((tab) => tab.dataset.tab === view.tab)?.textContent ?? "Back";
     else if (view.kind === "stage") name = STAGES[view.stage] ?? "Stage";
+    else if (view.kind === "cause") name = FATES[view.cause]?.name ?? "Memorial";
     else if (view.kind === "outside") {
       const [, type, number] = view.id.split("-");
       name = billLabel({ type: type.toUpperCase(), number });
@@ -154,6 +166,7 @@ export function createPanel(world: World, actions: PanelActions) {
     if (view.kind === "target") return actions.select(view.target);
     actions.select(null);
     if (view.kind === "stage") showStage(view.stage);
+    else if (view.kind === "cause") showCause(view.cause);
     else if (view.kind === "outside") void loadSearch().then((index) => showOutside(view.id, index));
   }
 
@@ -375,7 +388,75 @@ export function createPanel(world: World, actions: PanelActions) {
     );
   }
 
+  /** The memorial: every dead bill of the Congress, counted by the way it died. */
+  function showMemorial(site: Site) {
+    const dead = world.counts.dead;
+    const total = Object.values(dead ?? {}).reduce((sum, n) => sum + n, 0);
+    const everything = world.counts.total + ((world.counts as { pending?: number }).pending ?? 0);
+    const here = actions.billsAt(site.key);
+    const causes = Object.keys(FATES)
+      .filter((code) => dead?.[code])
+      .map((code) => {
+        const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, FATES[code].name), el("span", { class: "count" }, dead![code].toLocaleString())));
+        button.addEventListener("click", () => showCause(code));
+        return el("li", {}, button);
+      });
+    put(sections.inspect,
+      backButton(),
+      el("div", { class: "kicker" }, "Shared"),
+      el("h2", {}, site.label),
+      explainSite(site),
+      dead
+        ? el("p", {}, final
+            ? `${total.toLocaleString()} of the ${everything.toLocaleString()} bills and resolutions of the ${congressName} died.`
+            : `${total.toLocaleString()} of this Congress’s ${everything.toLocaleString()} bills and resolutions are dead or presumed dead.`)
+        : el("p", { class: "note" }, "The count of dead bills needs a newer copy of the data. It will appear after the next daily update."),
+      causes.length ? el("h3", {}, "How they died") : null,
+      el("ul", { class: "list" }, ...causes),
+      dead ? el("p", { class: "note" }, final
+        ? "Pick a cause to list its bills. Only bills that were vetoed or voted down lie at the memorial itself; the rest are on the map where they stood when the Congress ended."
+        : "Pick a cause to list its bills. A bill is presumed dead after a year with no action, and leaves the list if it moves again.") : null,
+      here.length ? el("h3", {}, "Laid at the memorial") : null,
+      el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${FATES[bill.fate ?? ""]?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
+    );
+  }
+
+  /** The dead bills of one cause, the most recent first. */
+  function showCause(code: string) {
+    const view = { kind: "cause", cause: code } as const;
+    visit(view);
+    showTab("inspect");
+    const head = [backButton(), el("div", { class: "kicker" }, "Bill Memorial"), el("h2", {}, FATES[code]?.name ?? "Dead bills"), el("p", {}, FATES[code]?.how ?? "")];
+    put(sections.inspect, ...head, el("p", { class: "note" }, "Loading every bill of this Congress…"));
+    void loadSearch().then((index) => {
+      if (JSON.stringify(trail[trail.length - 1].view) !== JSON.stringify(view)) return; // the visitor has moved on
+      const fate = index.fate ?? "";
+      const hits: number[] = [];
+      for (let i = 0; i < fate.length; i++) if (fate[i] === code) hits.push(i);
+      hits.sort((a, b) => index.date[b].localeCompare(index.date[a]) || index.id[a].localeCompare(index.id[b]));
+      const rows = hits.slice(0, 200).map((i) => {
+        const id = index.id[i];
+        const [, type, number] = id.split("-");
+        const onMap = bills.has(id);
+        const sponsor = index.sponsor_names?.[index.sponsor[i]] ?? "";
+        const button = el(
+          "button",
+          { type: "button" },
+          el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })} · ${index.title[i]}`),
+          el("span", { class: "row-sub" }, `${sponsor ? `${sponsor} · ` : ""}last action ${niceDate(index.date[i])}`),
+        );
+        button.addEventListener("click", () => (onMap ? actions.select({ type: "bill", id }) : openOutside(id)));
+        return el("li", {}, button);
+      });
+      put(sections.inspect, ...head,
+        el("p", { class: "note" }, hits.length > 200 ? `Showing the 200 most recent of ${hits.length.toLocaleString()}.` : `${hits.length.toLocaleString()} bill${hits.length === 1 ? "" : "s"}.`),
+        el("ul", { class: "list" }, ...rows),
+      );
+    }, () => put(sections.inspect, ...head, el("p", { class: "note" }, "The list could not be loaded.")));
+  }
+
   function showSite(site: Site) {
+    if (site.style === "memorial") return showMemorial(site);
     const here = actions.billsAt(site.key);
     const committee = el("div", {});
     if (site.style === "committee") {
@@ -423,7 +504,13 @@ export function createPanel(world: World, actions: PanelActions) {
 
   const searchBox = el("input", { type: "search", id: "search-box", placeholder: "Bill number, title words, or a name", autocomplete: "off" });
   const searchResults = el("div", {});
-  sections.search.append(el("label", { for: "search-box" }, "Search all bills and members"), searchBox, searchResults);
+  const everywhere = el("input", { type: "checkbox", id: "search-everywhere", checked: "" });
+  sections.search.append(
+    el("label", { for: "search-box" }, "Search all bills and members"),
+    searchBox,
+    el("label", { class: "check", for: "search-everywhere" }, everywhere, " Bills of every other Congress too"),
+    searchResults,
+  );
   let searchRun = 0;
 
   async function runSearch() {
@@ -475,7 +562,48 @@ export function createPanel(world: World, actions: PanelActions) {
       el("h3", {}, hits.length === 60 ? "Bills (first 60)" : `Bills (${hits.length})`),
       rows.length ? el("ul", { class: "list" }, ...rows) : el("p", { class: "note" }, "No bill matches."),
     );
+
+    // The other Congresses, newest first. Their indexes load the first time this is used.
+    if (!everywhere.checked) return;
+    const others = (await loadCongressLine()).filter((entry) => entry.congress !== world.congress);
+    if (run !== searchRun || !others.length) return;
+    const waiting = el("p", { class: "note" }, "Searching the other Congresses…");
+    searchResults.append(waiting);
+    const elsewhere: HTMLElement[] = [];
+    for (const entry of others) {
+      let other: SearchIndex;
+      try {
+        other = await loadSearchOf(entry.live ? null : entry.congress);
+      } catch {
+        continue;
+      }
+      if (run !== searchRun) return;
+      let found = 0;
+      for (let i = 0; i < other.id.length && found < 12; i++) {
+        const id = other.id[i];
+        const [, type, number] = id.split("-");
+        if (`${type}${number}` !== compact && !words.every((word) => other.title[i].toLowerCase().includes(word))) continue;
+        found++;
+        const button = el(
+          "button",
+          { type: "button" },
+          el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })} · ${other.title[i]}`),
+          el("span", { class: "row-sub" }, `${ordinal(entry.congress)} Congress · ${other.statuses[other.status[i]] ?? ""} · ${niceDate(other.date[i])}`),
+        );
+        // A link to a bill of another Congress opens that Congress with the bill selected.
+        button.addEventListener("click", () => (location.hash = `#bill=${id}`));
+        elsewhere.push(el("li", {}, button));
+      }
+    }
+    waiting.remove();
+    add(
+      searchResults,
+      el("h3", {}, "In other Congresses"),
+      elsewhere.length ? el("ul", { class: "list" }, ...elsewhere) : el("p", { class: "note" }, "No bill matches."),
+      elsewhere.length ? el("p", { class: "note" }, "Up to 12 from each Congress. Picking one opens that Congress.") : null,
+    );
   }
+  everywhere.addEventListener("change", () => void runSearch());
   searchBox.addEventListener("input", () => void runSearch());
   void runSearch();
 
@@ -491,25 +619,28 @@ export function createPanel(world: World, actions: PanelActions) {
   const party = select("f-party", [["", "Any party"], ["D", "Democrats"], ["R", "Republicans"], ["I", "Independents"]]);
   const area = select("f-area", [["", "Any policy area"], ...areas.map((a) => [a, a] as [string, string])]);
   const stage = select("f-stage", [["", "Any stage"], ...kinds.map((k) => [k, STAGES[k]] as [string, string])]);
+  const deadOnly = el("input", { type: "checkbox", id: "f-dead" });
   const summary = el("p", { class: "note" });
   const reset = el("button", { type: "button" }, "Clear filters");
   const applyFilters = () => {
-    const filter: Filter = { party: party.value, policyArea: area.value, stage: stage.value };
+    const filter: Filter = { party: party.value, policyArea: area.value, stage: stage.value, dead: deadOnly.checked };
     actions.filter(filter);
     const n = world.bills.filter(
-      (bill) => (!filter.policyArea || bill.policy_area === filter.policyArea) && (!filter.stage || bill.loc.kind === filter.stage) && (!filter.party || members.get(bill.sponsor)?.party === filter.party),
+      (bill) => (!filter.policyArea || bill.policy_area === filter.policyArea) && (!filter.stage || bill.loc.kind === filter.stage) && (!filter.dead || Boolean(bill.fate)) && (!filter.party || members.get(bill.sponsor)?.party === filter.party),
     ).length;
-    summary.textContent = filter.party || filter.policyArea || filter.stage ? `${n.toLocaleString()} of ${world.bills.length.toLocaleString()} active bills match. Everything else is dimmed.` : "Nothing is filtered.";
+    summary.textContent = filter.party || filter.policyArea || filter.stage || filter.dead ? `${n.toLocaleString()} of ${world.bills.length.toLocaleString()} active bills match. Everything else is dimmed.` : "Nothing is filtered.";
   };
-  for (const node of [party, area, stage]) node.addEventListener("change", applyFilters);
+  for (const node of [party, area, stage, deadOnly]) node.addEventListener("change", applyFilters);
   reset.addEventListener("click", () => {
     party.value = area.value = stage.value = "";
+    deadOnly.checked = false;
     applyFilters();
   });
   sections.filters.append(
     el("label", { for: "f-party" }, "Sponsor's party"), party,
     el("label", { for: "f-area" }, "Policy area"), area,
     el("label", { for: "f-stage" }, "Stage"), stage,
+    el("label", { class: "check", for: "f-dead" }, deadOnly, " Dead bills only"),
     summary, reset,
   );
   summary.textContent = "Nothing is filtered.";

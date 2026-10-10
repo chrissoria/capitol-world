@@ -1,8 +1,8 @@
 // The Stats tab: how many measures were introduced in a period, by whom, and how
 // far those same measures have got. Everything is counted in the browser from
-// the search index, so the choices below can be combined freely.
+// the search indexes, one per Congress, so any run of Congresses can be combined.
 
-import { loadSearch } from "../data/load";
+import { loadCongressLine, loadSearchOf, type CongressEntry } from "../data/load";
 import { ordinal, type SearchIndex, type World } from "../data/types";
 import { add, el, niceDate, put } from "./dom";
 
@@ -26,13 +26,16 @@ const PARTIES: [string, string][] = [
 ];
 
 interface Row {
+  congress: number;
   introduced: string;
   house: boolean;
   law: boolean;
   party: string;
   stage: number;
-  sponsor: number;
-  area: number;
+  /** The sponsor's member id, or "" when it is not known. */
+  sponsor: string;
+  name: string;
+  area: string;
 }
 
 interface Tally {
@@ -67,26 +70,53 @@ function daysBefore(day: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+const yearsOf = (entry: CongressEntry) => `${entry.years[0]}–${entry.years[1] ?? "now"}`;
+
+function toRows(data: SearchIndex, congress: number): Row[] {
+  const { introduced, party, stage } = data;
+  if (!introduced || !party || !stage) return [];
+  return data.id.map((id, i) => {
+    const type = id.split("-")[1];
+    const sponsor = data.sponsor[i];
+    return {
+      congress,
+      introduced: introduced[i],
+      house: type.startsWith("h"),
+      law: CAN_BECOME_LAW.has(type),
+      party: party[i],
+      stage: Number(stage[i]),
+      sponsor: data.sponsors[sponsor] ?? "",
+      name: data.sponsor_names?.[sponsor] ?? "",
+      area: data.policy_areas[data.policy_area[i]] ?? "",
+    };
+  });
+}
+
 export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void) {
   const members = new Map(world.members.map((member) => [member.id, member]));
   const select = (id: string, options: [string, string][], value: string) => {
     const node = el("select", { id });
-    for (const [key, label] of options) node.append(el("option", { value: key }, label));
-    node.value = value;
+    fill(node, options, value);
     return node;
   };
-  // A finished Congress has no "last 30 days": offer the whole of it and each of its years.
-  const years = world.final && world.years ? [world.years[0], world.years[0] + 1] : [];
-  const periods: [string, string][] = world.final
-    ? [["all", "The whole Congress"], ...years.map((year) => [`y${year}`, String(year)] as [string, string])]
-    : PERIODS.map(([key, label]) => [key, label] as [string, string]);
-  const period = select("s-period", periods, world.final ? "all" : "month");
+  const fill = (node: HTMLSelectElement, options: [string, string][], value: string) => {
+    node.replaceChildren(...options.map(([key, label]) => el("option", { value: key }, label)));
+    node.value = options.some(([key]) => key === value) ? value : (options[0]?.[0] ?? "");
+  };
+
+  // Until the list of Congresses arrives, the only one on offer is the one on show.
+  let line: CongressEntry[] = [{ congress: world.congress, years: world.years ?? [1789 + 2 * (world.congress - 1), null], live: !world.final }];
+  const from = select("s-from", [[String(world.congress), `${ordinal(world.congress)} Congress`]], String(world.congress));
+  const to = select("s-to", [[String(world.congress), `${ordinal(world.congress)} Congress`]], String(world.congress));
+  const period = select("s-period", [], "");
   const kind = select("s-kind", KINDS, "law");
   const chamber = select("s-chamber", [["", "Both chambers"], ["House", "House"], ["Senate", "Senate"]], "");
   const body = el("div", {});
   add(
     section,
     el("h2", {}, "Statistics"),
+    el("label", { for: "s-from" }, "Congresses"),
+    el("div", { class: "pair" }, from, el("span", {}, "to"), to),
     el("label", { for: "s-period" }, "Introduced in"),
     period,
     el("label", { for: "s-kind" }, "Kind of measure"),
@@ -96,28 +126,48 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     body,
   );
 
-  let index: SearchIndex | undefined;
   let rows: Row[] = [];
+  let chosenLine: CongressEntry[] = [];
+  let pending = 0;
   let latest = "";
+  let state: "loading" | "ready" | "failed" = "loading";
   let opened = false;
+  let loads = 0;
 
-  function prepare(data: SearchIndex) {
-    index = data;
-    const { introduced, party, stage } = data;
-    if (!introduced || !party || !stage) return;
-    rows = data.id.map((id, i) => {
-      const type = id.split("-")[1];
-      return {
-        introduced: introduced[i],
-        house: type.startsWith("h"),
-        law: CAN_BECOME_LAW.has(type),
-        party: party[i],
-        stage: Number(stage[i]),
-        sponsor: data.sponsor[i],
-        area: data.policy_area[i],
-      };
-    });
-    latest = rows.reduce((max, row) => (row.introduced > max ? row.introduced : max), "");
+  const span = () => chosenLine.length > 0 && chosenLine.some((entry) => entry.live);
+  const single = () => chosenLine.length === 1;
+
+  function setPeriods() {
+    const keep = period.value;
+    if (single() && span()) {
+      fill(period, PERIODS.map(([key, label]) => [key, label] as [string, string]), keep || "month");
+      return;
+    }
+    const years = [...new Set(rows.map((row) => row.introduced.slice(0, 4)).filter(Boolean))].sort();
+    const whole = single() ? "The whole Congress" : `All of it, ${chosenLine[0].years[0]}–${chosenLine[chosenLine.length - 1].years[1] ?? "now"}`;
+    fill(period, [["all", whole], ...years.map((year) => [`y${year}`, year] as [string, string])], keep.startsWith("y") ? keep : "all");
+  }
+
+  async function load() {
+    const turn = ++loads;
+    const low = Math.min(Number(from.value), Number(to.value));
+    const high = Math.max(Number(from.value), Number(to.value));
+    chosenLine = line.filter((entry) => entry.congress >= low && entry.congress <= high).sort((a, b) => a.congress - b.congress);
+    state = "loading";
+    render();
+    try {
+      const indexes = await Promise.all(chosenLine.map((entry) => loadSearchOf(entry.live ? null : entry.congress)));
+      if (turn !== loads) return;
+      rows = indexes.flatMap((data, i) => toRows(data, chosenLine[i].congress));
+      pending = indexes.reduce((sum, data, i) => sum + (chosenLine[i].live ? (data.pending ?? 0) : 0), 0);
+      latest = rows.reduce((max, row) => (row.introduced > max ? row.introduced : max), "");
+      state = "ready";
+      setPeriods();
+    } catch {
+      if (turn !== loads) return;
+      state = "failed";
+    }
+    render();
   }
 
   function bar(label: string, value: number, whole: number, note = "") {
@@ -131,50 +181,54 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     );
   }
 
-  function chart(chosen: Row[], since: string, days: number, latest: string) {
+  function chart(chosen: Row[], since: string, days: number, last: string) {
     if (days === 1 || !chosen.length) return null;
-    // Days for the short periods, months for the long ones.
-    const byMonth = days === 0 || days > 60;
-    const first = since || chosen.reduce((min, row) => (row.introduced < min ? row.introduced : min), latest);
+    const first = since || chosen.reduce((min, row) => (row.introduced < min ? row.introduced : min), last);
+    // Days for the short periods, months for a Congress or two, years beyond that.
+    const unit = days > 0 && days <= 60 ? "day" : Number(last.slice(0, 4)) - Number(first.slice(0, 4)) > 4 ? "year" : "month";
+    const width = unit === "day" ? 10 : unit === "month" ? 7 : 4;
     const keys: string[] = [];
-    if (byMonth) {
-      for (let cursor = first.slice(0, 7); cursor <= latest.slice(0, 7); ) {
+    if (unit === "day") for (let back = days - 1; back >= 0; back--) keys.push(daysBefore(last, back));
+    else if (unit === "year") for (let year = Number(first.slice(0, 4)); year <= Number(last.slice(0, 4)); year++) keys.push(String(year));
+    else {
+      for (let cursor = first.slice(0, 7); cursor <= last.slice(0, 7); ) {
         keys.push(cursor);
         const [year, month] = cursor.split("-").map(Number);
         cursor = month === 12 ? `${year + 1}-01` : `${year}-${String(month + 1).padStart(2, "0")}`;
       }
-    } else for (let back = days - 1; back >= 0; back--) keys.push(daysBefore(latest, back));
+    }
     const buckets = new Map(keys.map((key) => [key, { R: 0, D: 0, I: 0 }]));
     for (const row of chosen) {
-      const bucket = buckets.get(byMonth ? row.introduced.slice(0, 7) : row.introduced);
+      const bucket = buckets.get(row.introduced.slice(0, width));
       if (bucket) bucket[row.party === "R" ? "R" : row.party === "D" ? "D" : "I"]++;
     }
     const tallest = Math.max(1, ...[...buckets.values()].map((b) => b.R + b.D + b.I));
+    const name = (key: string) =>
+      unit === "day" ? niceDate(key) : unit === "year" ? key : new Date(`${key}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" });
     const columns = keys.map((key) => {
       const b = buckets.get(key)!;
-      const total = b.R + b.D + b.I;
-      const label = byMonth ? new Date(`${key}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : niceDate(key);
-      const column = el("div", { class: "column", title: `${label}: ${total.toLocaleString()} (${b.R} R, ${b.D} D, ${b.I} I)` });
+      const column = el("div", { class: "column", title: `${name(key)}: ${(b.R + b.D + b.I).toLocaleString()} (${b.R} R, ${b.D} D, ${b.I} I)` });
       for (const party of ["I", "D", "R"] as const) {
         if (b[party]) column.append(el("i", { class: party, style: `height:${(b[party] / tallest) * 100}%` }));
       }
       return column;
     });
-    const edge = (key: string) => (byMonth ? new Date(`${key}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "numeric" }) : niceDate(key));
     return el(
       "div",
       {},
-      el("h3", {}, byMonth ? "Introduced each month" : "Introduced each day"),
-      el("div", { class: "chart", role: "img", "aria-label": `Bar chart of measures introduced ${byMonth ? "each month" : "each day"}, coloured by the sponsor's party` }, ...columns),
-      el("div", { class: "chart-axis" }, el("span", {}, edge(keys[0])), el("span", {}, `tallest bar: ${tallest.toLocaleString()}`), el("span", {}, edge(keys[keys.length - 1]))),
+      el("h3", {}, `Introduced each ${unit}`),
+      el("div", { class: "chart", role: "img", "aria-label": `Bar chart of measures introduced each ${unit}, coloured by the sponsor's party` }, ...columns),
+      el("div", { class: "chart-axis" }, el("span", {}, name(keys[0])), el("span", {}, `tallest bar: ${tallest.toLocaleString()}`), el("span", {}, name(keys[keys.length - 1]))),
     );
   }
 
   function render() {
-    if (!index) return put(body, el("p", { class: "note" }, "Loading every bill of this Congress…"));
+    if (state === "failed") return put(body, el("p", { class: "note" }, "The statistics could not be loaded."));
+    if (state === "loading") return put(body, el("p", { class: "note" }, chosenLine.length > 1 ? `Loading every bill of ${chosenLine.length} Congresses…` : "Loading every bill of this Congress…"));
     if (!rows.length) {
       return put(body, el("p", { class: "note" }, "These statistics need a newer copy of the data. They will appear after the next daily update."));
     }
+    const live = span();
     const year = period.value.startsWith("y") ? period.value.slice(1) : "";
     const days = PERIODS.find(([key]) => key === period.value)?.[2] ?? 0;
     const since = days ? daysBefore(latest, days - 1) : "";
@@ -188,21 +242,28 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     );
     const all = emptyTally();
     const byParty = new Map(PARTIES.map(([key]) => [key, emptyTally()]));
-    const bySponsor = new Map<number, Tally>();
-    const byArea = new Map<number, number>();
+    const byCongress = new Map(chosenLine.map((entry) => [entry.congress, emptyTally()]));
+    const bySponsor = new Map<string, { tally: Tally; name: string; party: string }>();
+    const byArea = new Map<string, number>();
     for (const row of chosen) {
       count(all, row.stage);
       const party = byParty.get(row.party);
       if (party) count(party, row.stage);
-      if (row.sponsor >= 0) {
-        if (!bySponsor.has(row.sponsor)) bySponsor.set(row.sponsor, emptyTally());
-        count(bySponsor.get(row.sponsor)!, row.stage);
+      count(byCongress.get(row.congress)!, row.stage);
+      if (row.sponsor) {
+        if (!bySponsor.has(row.sponsor)) bySponsor.set(row.sponsor, { tally: emptyTally(), name: row.name, party: row.party });
+        count(bySponsor.get(row.sponsor)!.tally, row.stage);
       }
-      if (row.area >= 0) byArea.set(row.area, (byArea.get(row.area) ?? 0) + 1);
+      if (row.area) byArea.set(row.area, (byArea.get(row.area) ?? 0) + 1);
     }
 
     const noun = kind.value === "law" ? "bills and joint resolutions" : kind.value === "res" ? "resolutions" : "measures";
-    const span = days === 1 ? `on ${niceDate(latest)}` : days ? `from ${niceDate(since)} to ${niceDate(latest)}` : year ? `in ${year}` : world.final ? `in the ${ordinal(world.congress)} Congress` : `since ${niceDate("2025-01-03")}`;
+    const first = chosenLine[0];
+    const last = chosenLine[chosenLine.length - 1];
+    const where = single()
+      ? `in the ${ordinal(first.congress)} Congress`
+      : `in the ${ordinal(first.congress)} to ${ordinal(last.congress)} Congresses (${first.years[0]}–${last.years[1] ?? "now"})`;
+    const when = days === 1 ? `on ${niceDate(latest)}` : days ? `from ${niceDate(since)} to ${niceDate(latest)}` : year ? `in ${year}` : where;
     const canBecomeLaw = kind.value !== "res";
     const passedLabel = kind.value === "res" ? "Agreed to by a chamber" : "Passed at least one chamber";
     const votedNote = all.voted ? ` · ${percent(all.passed, all.voted)} of those that got a floor vote` : "";
@@ -224,18 +285,38 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       );
     });
 
+    // One row per Congress, so they can be compared.
+    const most = Math.max(1, ...[...byCongress.values()].map((tally) => tally.introduced));
+    const congressRows = single()
+      ? []
+      : [...chosenLine].reverse().map((entry) => {
+          const tally = byCongress.get(entry.congress)!;
+          return el(
+            "li",
+            {},
+            el("div", { class: "bar-row" }, el("span", {}, `${ordinal(entry.congress)} · ${yearsOf(entry)}`), el("span", { class: "count" }, tally.introduced.toLocaleString())),
+            el("div", { class: "meter" }, el("i", { style: `width:${(tally.introduced / most) * 100}%` })),
+            el(
+              "div",
+              { class: "row-sub" },
+              `Out of committee ${percent(tally.reported, tally.introduced)} · passed a chamber ${percent(tally.passed, tally.introduced)}`,
+              canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law (${percent(tally.law, tally.introduced)})` : "",
+              entry.live ? " · still under way" : "",
+            ),
+          );
+        });
+
     const sponsorRows = [...bySponsor.entries()]
-      .sort((a, b) => b[1].introduced - a[1].introduced || b[1].passed - a[1].passed)
+      .sort((a, b) => b[1].tally.introduced - a[1].tally.introduced || b[1].tally.passed - a[1].tally.passed)
       .slice(0, 8)
-      .map(([sponsorIndex, tally]) => {
-        const member = members.get(index!.sponsors[sponsorIndex]);
-        if (!member) return null;
-        const button = el(
-          "button",
-          { type: "button" },
-          el("span", { class: "row-title" }, el("span", { class: `pin ${member.party}` }), `${member.name} (${member.party}-${member.state})`),
-          el("span", { class: "row-sub" }, `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a chamber${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`),
-        );
+      .map(([id, { tally, name, party }]) => {
+        const member = members.get(id);
+        const label = member ? `${member.name} (${member.party}-${member.state})` : name;
+        if (!label) return null;
+        const title = el("span", { class: "row-title" }, el("span", { class: `pin ${member?.party ?? party}` }), label);
+        const sub = el("span", { class: "row-sub" }, `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a chamber${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`);
+        if (!member) return el("li", {}, el("div", { class: "plain-row" }, title, sub)); // not in the Congress on show
+        const button = el("button", { type: "button" }, title, sub);
         button.addEventListener("click", () => pickMember(member.id));
         return el("li", {}, button);
       });
@@ -243,13 +324,13 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     const areaRows = [...byArea.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([area, n]) => el("li", {}, el("div", { class: "bar-row" }, el("span", {}, index!.policy_areas[area]), el("span", { class: "count" }, n.toLocaleString()))));
+      .map(([area, n]) => el("li", {}, el("div", { class: "bar-row" }, el("span", {}, area), el("span", { class: "count" }, n.toLocaleString()))));
 
     put(
       body,
       el("div", { class: "stat-big" }, all.introduced.toLocaleString()),
-      el("p", {}, `${noun} introduced ${span}${chamber.value ? ` in the ${chamber.value}` : ""}.`),
-      all.introduced ? el("h3", {}, world.final ? "How far they got" : "How far they have got") : null,
+      el("p", {}, `${noun} introduced ${when}${chamber.value ? ` in the ${chamber.value}` : ""}.`),
+      all.introduced ? el("h3", {}, live ? "How far they have got" : "How far they got") : null,
       all.introduced
         ? el(
             "ul",
@@ -261,7 +342,16 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
             canBecomeLaw ? bar("Became law", all.law, all.introduced) : null,
           )
         : null,
-      all.introduced ? el("p", { class: "note" }, `${world.final ? "This Congress has ended, so these are final." : "These follow the same measures counted above, so recent ones have had less time to move."} A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.`) : null,
+      all.introduced
+        ? el(
+            "p",
+            { class: "note" },
+            live ? "These follow the same measures counted above, so recent ones have had less time to move." : `${single() ? "This Congress has" : "These Congresses have"} ended, so these are final.`,
+            " A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.",
+          )
+        : null,
+      congressRows.length ? el("h3", {}, "By Congress") : null,
+      el("ul", { class: "list" }, ...congressRows),
       partyRows.length ? el("h3", {}, "By sponsor’s party") : null,
       el("ul", { class: "list" }, ...partyRows),
       chart(chosen, since, days, year ? chosen.reduce((max, row) => (row.introduced > max ? row.introduced : max), "") : latest),
@@ -272,27 +362,29 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       el(
         "p",
         { class: "note" },
-        `Counted from ${rows.length.toLocaleString()} measures of this Congress, by the date each was introduced. `,
-        index.pending ? `That includes ${index.pending.toLocaleString()} too new to have published text. ` : "The newest few may be missing until their text is published. ",
+        `Counted from ${rows.length.toLocaleString()} measures of ${single() ? "this Congress" : `${chosenLine.length} Congresses`}, by the date each was introduced. `,
+        live ? (pending ? `That includes ${pending.toLocaleString()} too new to have published text. ` : "The newest few may be missing until their text is published. ") : "",
         "Party is the sponsor’s; cosponsors are not counted.",
       ),
     );
   }
 
   for (const node of [period, kind, chamber]) node.addEventListener("change", render);
+  for (const node of [from, to]) node.addEventListener("change", () => void load());
 
   return {
     /** Called when the tab is shown; loads the index the first time. */
     open() {
       if (opened) return;
       opened = true;
-      render();
-      loadSearch()
-        .then((data) => {
-          prepare(data);
-          render();
-        })
-        .catch(() => put(body, el("p", { class: "note" }, "The statistics could not be loaded.")));
+      void load();
+      void loadCongressLine().then((entries) => {
+        if (entries.length < 2 || !section.isConnected) return;
+        line = entries;
+        const options = entries.map((entry) => [String(entry.congress), `${ordinal(entry.congress)} · ${yearsOf(entry)}`] as [string, string]);
+        fill(from, options, from.value);
+        fill(to, options, to.value);
+      });
     },
   };
 }

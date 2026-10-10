@@ -140,11 +140,12 @@ const SHARED: Record<string, Note> = {
     ],
     here: "Bills that became law in the last 30 days. The Law Archive stands in for the National Archives; it is not a real building.",
   },
-  bin: {
+  memorial: {
     role: [
-      "A vetoed bill goes back to the chamber where it started, with the President’s objections. Congress can override the veto with a two-thirds vote in each chamber, and the bill then becomes law without the President. Overrides are rare.",
+      "Most bills never become law. A few are stopped by an event: the President vetoes one and Congress does not override it, or a chamber votes one down. Far more simply run out of time. A bill that has not become law when a Congress ends, every two years, dies with it and has to be introduced again from the start.",
+      "There is no such building. It is this map’s way of showing the bills that are finished without having succeeded, and why.",
     ],
-    here: "Bills the President has vetoed. The bin is this map’s shorthand; a vetoed bill is really returned to Congress.",
+    here: "Bills that were vetoed or lost a floor vote are laid here. The panel also counts every other dead bill by the way it died.",
   },
   hall: {
     role: [

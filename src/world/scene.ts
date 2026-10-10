@@ -47,6 +47,8 @@ export interface Filter {
   party: string;
   policyArea: string;
   stage: string;
+  /** Only bills that are dead (vetoed, voted down, or expired). */
+  dead: boolean;
 }
 
 const FONT = '"Trebuchet MS", "Verdana", sans-serif';
@@ -108,7 +110,7 @@ export class WorldScene extends Phaser.Scene {
   private walkers = new Map<string, Walker>();
   private timers: Phaser.Time.TimerEvent[] = [];
   private selected: Target | null = null;
-  private filter: Filter = { party: "", policyArea: "", stage: "" };
+  private filter: Filter = { party: "", policyArea: "", stage: "", dead: false };
   private lastZoom = -1;
   private pinch = 0;
   private replaying = false;
@@ -127,7 +129,9 @@ export class WorldScene extends Phaser.Scene {
     for (const member of this.world.members) this.members.set(member.id, member);
     for (const bill of this.world.bills) {
       this.bills.set(bill.id, bill);
-      const key = siteKeyFor(locKey(bill.loc), this.layout.sites, bill.loc.chamber)!;
+      // A bill stopped by an event (a veto, a lost vote) is laid at the memorial; the rest stay where they stood.
+      const stopped = bill.fate === "v" || bill.fate === "f";
+      const key = stopped ? "memorial" : siteKeyFor(locKey(bill.loc), this.layout.sites, bill.loc.chamber)!;
       this.finalSite.set(bill.id, key);
       this.currentSite.set(bill.id, key);
     }
@@ -315,6 +319,7 @@ export class WorldScene extends Phaser.Scene {
     const f = this.filter;
     if (f.policyArea && bill.policy_area !== f.policyArea) return false;
     if (f.stage && bill.loc.kind !== f.stage) return false;
+    if (f.dead && !bill.fate) return false;
     if (f.party && this.members.get(bill.sponsor)?.party !== f.party) return false;
     return true;
   }
@@ -324,7 +329,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private filtering(): boolean {
-    return Boolean(this.filter.party || this.filter.policyArea || this.filter.stage);
+    return Boolean(this.filter.party || this.filter.policyArea || this.filter.stage || this.filter.dead);
   }
 
   private rebuildOccupancy() {
@@ -376,8 +381,10 @@ export class WorldScene extends Phaser.Scene {
     this.docks.set(siteKey, view);
 
     const siteView = this.siteViews.get(siteKey)!;
-    const matching = this.filtering() ? list.filter((bill) => this.matchesBill(bill)).length : list.length;
-    siteView.count.setText(matching > 0 ? String(matching) : "");
+    let matching = this.filtering() ? list.filter((bill) => this.matchesBill(bill)).length : list.length;
+    // The memorial stands for every dead bill of the Congress, not only the ones laid at its door.
+    if (site.style === "memorial" && !this.filtering()) matching = Object.values(this.world.counts.dead ?? {}).reduce((sum, n) => sum + n, 0) || matching;
+    siteView.count.setText(matching > 0 ? matching.toLocaleString() : "");
     this.applyLod(true);
   }
 

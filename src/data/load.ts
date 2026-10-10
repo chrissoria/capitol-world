@@ -17,7 +17,6 @@ export let archived: number | null = congressInAddress();
 export function setCongress(congress: number | null) {
   archived = congress;
   committeeFile = undefined;
-  searchIndex = undefined;
 }
 
 // A finished Congress is built once and kept in its own folder; it has no bundled copy.
@@ -46,11 +45,16 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 async function fromEither<T>(file: string): Promise<{ data: T; source: DataSource }> {
   if (archived) return { data: await fetchJson<T>(remote() + file), source: "live" };
+  return currentFile<T>(file);
+}
+
+/** A file of the current Congress: live or bundled, whichever is preferred, with the other as a fallback. */
+async function currentFile<T>(file: string): Promise<{ data: T; source: DataSource }> {
   const order: DataSource[] = preferred() === "live" ? ["live", "bundled"] : ["bundled", "live"];
   let lastError: unknown;
   for (const source of order) {
     try {
-      return { data: await fetchJson<T>((source === "live" ? remote() : BUNDLED) + file), source };
+      return { data: await fetchJson<T>((source === "live" ? ROOT : BUNDLED) + file), source };
     } catch (error) {
       lastError = error;
     }
@@ -79,10 +83,44 @@ export function loadCommittees(): Promise<CommitteeFile> {
   return committeeFile;
 }
 
-let searchIndex: Promise<SearchIndex> | undefined;
+const searchIndexes = new Map<number | null, Promise<SearchIndex>>();
 
-/** Every bill, loaded the first time the search box is used. */
+/** Every bill of one Congress (null for the current one). Kept once loaded, whichever Congress is on show. */
+export function loadSearchOf(congress: number | null): Promise<SearchIndex> {
+  let index = searchIndexes.get(congress);
+  if (!index) {
+    index = congress
+      ? fetchJson<SearchIndex>(`${ROOT}archive/${congress}/search.json.gz`)
+      : currentFile<SearchIndex>("search.json.gz").then((result) => result.data);
+    index.catch(() => searchIndexes.delete(congress)); // so a failed load can be tried again
+    searchIndexes.set(congress, index);
+  }
+  return index;
+}
+
+/** Every bill of the Congress on show, loaded the first time the search box is used. */
 export function loadSearch(): Promise<SearchIndex> {
-  searchIndex ??= fromEither<SearchIndex>("search.json.gz").then((result) => result.data);
-  return searchIndex;
+  return loadSearchOf(archived);
+}
+
+export interface CongressEntry {
+  congress: number;
+  /** First and last year; the last is null for the Congress still under way. */
+  years: [number, number | null];
+  live: boolean;
+}
+
+let congressLine: Promise<CongressEntry[]> | undefined;
+
+/** Every Congress that can be opened, the current one first. Empty if the list cannot be read. */
+export function loadCongressLine(): Promise<CongressEntry[]> {
+  congressLine ??= loadCongresses().then((list) => {
+    if (!list.length) return [];
+    const current = Math.max(...list.map((item) => item.congress)) + 1;
+    return [
+      { congress: current, years: [1789 + 2 * (current - 1), null], live: true },
+      ...list.map((item) => ({ congress: item.congress, years: item.years, live: false }) satisfies CongressEntry),
+    ];
+  });
+  return congressLine;
 }

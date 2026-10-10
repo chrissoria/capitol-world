@@ -54,6 +54,8 @@ export interface Bill {
   introduced: string;
   summary: string;
   url: string;
+  /** Why the bill is dead (see FATES); absent for a bill that is alive or that succeeded. */
+  fate?: string;
 }
 
 export interface MoveEvent {
@@ -81,6 +83,8 @@ export interface World {
     guessed_locations: number;
     by_status: Record<string, number>;
     by_kind: Record<string, number>;
+    /** Dead bills of the whole Congress, by cause (see FATES). */
+    dead?: Record<string, number>;
   };
   roles?: { chairs: Record<string, string>; leaders: Record<string, string> };
   members: Member[];
@@ -126,6 +130,10 @@ export interface SearchIndex {
   party?: string;
   /** One digit per bill: 0 in committee, 1 out of committee, 2 failed a floor vote, 3 passed a chamber, 4 passed both, 5 law. */
   stage?: string;
+  /** "Name (P-ST)" for each entry of `sponsors`. */
+  sponsor_names?: string[];
+  /** One character per bill: why it is dead (see FATES), or "." if it is not. */
+  fate?: string;
 }
 
 export function locKey(loc: Loc): string {
