@@ -1,3 +1,4 @@
+import type { CommitteeFile } from "./meetings";
 import type { SearchIndex, World } from "./types";
 
 const REMOTE = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
@@ -43,6 +44,14 @@ export async function loadWorld(): Promise<{ world: World; source: DataSource }>
     throw new Error("world.json is not in the expected format");
   }
   return { world: data, source };
+}
+
+let committeeFile: Promise<CommitteeFile> | undefined;
+
+/** Committee rosters and meetings, loaded the first time a committee is opened. */
+export function loadCommittees(): Promise<CommitteeFile> {
+  committeeFile ??= fromEither<CommitteeFile>("committees.json").then((result) => result.data);
+  return committeeFile;
 }
 
 let searchIndex: Promise<SearchIndex> | undefined;

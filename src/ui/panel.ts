@@ -1,6 +1,7 @@
 // The side panel: everything on the map is also reachable here with a keyboard.
 
 import { loadSearch } from "../data/load";
+import { comingMeetings, liveMeeting, meetingTime, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel } from "../data/types";
 import type { Site } from "../world/layout";
@@ -40,6 +41,9 @@ export interface PanelActions {
   billsAt(siteKey: string): Bill[];
   siteOf(billId: string): Site | undefined;
   siteByKey(key: string): Site | undefined;
+  committee(code: string): Promise<CommitteeInfo | undefined>;
+  /** Show a committee's room as it would have been for one of its meetings. */
+  stage(code: string, meetingId: string): void;
 }
 
 function congressUrl(id: string): string {
@@ -106,7 +110,7 @@ export function createPanel(world: World, actions: PanelActions) {
         `${world.counts.world.toLocaleString()} bills had an action in the 30 days up to ${niceDate(world.data_through)}. `,
         "Each sheet of paper on the map is one of them, sitting where its latest action left it.",
       ),
-      el("p", { class: "note" }, "Click a paper or a building. Click the House or the Senate to go inside and meet the members. Drag to move around; scroll or pinch to zoom."),
+      el("p", { class: "note" }, "Click a paper or a building. The House, the Senate and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom."),
       el("h3", {}, "Where those bills are"),
       el("ul", { class: "list" }, ...rows),
       el("p", { class: "note" }, `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
@@ -187,8 +191,79 @@ export function createPanel(world: World, actions: PanelActions) {
     );
   }
 
+  /** One meeting, folded: open it for the bills taken up, what was decided, and a way to see it in the room. */
+  function meetingRow(code: string, meeting: CommitteeMeeting, info: CommitteeInfo, past: boolean) {
+    const facts = [meetingTime(meeting), meeting.type];
+    if (meeting.sub) facts.push(info.subcommittees[meeting.sub] ?? "Subcommittee");
+    if (meeting.n_bills) facts.push(`${meeting.n_bills} bill${meeting.n_bills === 1 ? "" : "s"}`);
+    if (meeting.n_witnesses) facts.push(`${meeting.n_witnesses} witness${meeting.n_witnesses === 1 ? "" : "es"}`);
+    const billRows = meeting.bills.map((id) => {
+      const [, type, number] = id.split("-");
+      const known = bills.get(id);
+      const button = el("button", { type: "button" }, el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })}${known ? ` · ${known.title}` : ""}`), known ? null : el("span", { class: "row-sub" }, "Not on the map: no action in the last 30 days"));
+      button.addEventListener("click", () => {
+        if (known) return actions.select({ type: "bill", id });
+        void loadSearch().then((index) => {
+          showOutside(id, index);
+          history.replaceState(null, "", `#bill=${id}`);
+        });
+      });
+      return el("li", {}, button);
+    });
+    const stage = past ? el("button", { type: "button" }, "▶ Re-stage it in the room") : null;
+    stage?.addEventListener("click", () => actions.stage(code, meeting.id));
+    return el(
+      "details",
+      { class: "explain meeting" },
+      el("summary", {}, el("span", { class: "row-title" }, meeting.title || meeting.type), el("span", { class: "row-sub" }, facts.join(" · "))),
+      meeting.place ? el("p", { class: "note" }, meeting.place) : null,
+      meeting.outcomes?.length ? el("p", {}, el("strong", {}, "What was decided")) : null,
+      meeting.outcomes?.length ? el("ul", { class: "outcomes" }, ...meeting.outcomes.map((line) => el("li", {}, line))) : null,
+      billRows.length ? el("p", {}, el("strong", {}, past ? "Bills taken up" : "Bills on the agenda")) : null,
+      billRows.length ? el("ul", { class: "list" }, ...billRows) : null,
+      meeting.n_bills > meeting.bills.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - meeting.bills.length} more, listed on Congress.gov.`) : null,
+      el("p", {}, stage, " ", el("a", { href: meeting.url, target: "_blank", rel: "noopener" }, "Videos and documents on Congress.gov ↗")),
+    );
+  }
+
+  /** A committee's calendar, past meetings and roster. */
+  function committeeBlock(code: string, info: CommitteeInfo) {
+    const live = liveMeeting(info);
+    const coming = comingMeetings(info);
+    const past = pastMeetings(info);
+    const order = (side: string) => info.members.filter((seat) => (seat.side === "majority") === (side === "majority")).sort((a, b) => a.rank - b.rank);
+    const roster = [...order("majority"), ...order("minority")].map((seat) => {
+      const member = members.get(seat.id);
+      if (!member) return null;
+      const button = el("button", { type: "button" }, pin(member.party), memberLine(member), seat.title ? el("span", { class: "row-sub" }, seat.title) : null);
+      button.addEventListener("click", () => actions.select({ type: "member", id: member.id }));
+      return el("li", {}, button);
+    });
+    const shown = past.slice(0, 8);
+    const older = past.slice(8);
+    return el(
+      "div",
+      {},
+      live ? el("p", {}, el("span", { class: "chip stage" }, "In session now"), live.title) : null,
+      el("h3", {}, "Calendar: coming up"),
+      coming.length ? el("div", {}, ...coming.map((meeting) => meetingRow(code, meeting, info, false))) : el("p", { class: "note" }, "Nothing is scheduled. Committees usually announce meetings about a week ahead."),
+      el("h3", {}, "Calendar: past meetings"),
+      past.length ? el("div", {}, ...shown.map((meeting) => meetingRow(code, meeting, info, true))) : el("p", { class: "note" }, "None on record."),
+      older.length ? el("details", { class: "explain" }, el("summary", {}, `${older.length} earlier meetings`), ...older.map((meeting) => meetingRow(code, meeting, info, true))) : null,
+      el("p", { class: "note" }, `${info.n_meetings.toLocaleString()} meetings this Congress, counting its subcommittees; the latest ${past.length} are here. Re-staging seats every current member and the listed witnesses. Who actually attended is not recorded.`),
+      roster.length ? el("details", { class: "explain" }, el("summary", {}, `Members (${info.members.length})`), el("ul", { class: "list" }, ...roster)) : null,
+    );
+  }
+
   function showSite(site: Site) {
     const here = actions.billsAt(site.key);
+    const committee = el("div", {});
+    if (site.style === "committee") {
+      const code = site.key.replace("committee:", "");
+      void actions.committee(code).then((info) => {
+        if (info && committee.isConnected) put(committee, committeeBlock(code, info));
+      });
+    }
     const chair = members.get(world.roles?.chairs[site.key.replace("committee:", "")] ?? "");
     const chairButton = chair ? el("button", { type: "button" }, pin(chair.party), `Chair: ${memberLine(chair)}`) : null;
     chairButton?.addEventListener("click", () => actions.select({ type: "member", id: chair!.id }));
@@ -198,6 +273,8 @@ export function createPanel(world: World, actions: PanelActions) {
       el("h2", {}, site.label),
       explainSite(site),
       chairButton ? el("ul", { class: "list" }, el("li", {}, chairButton)) : null,
+      committee,
+      site.style === "committee" ? el("h3", {}, "Bills with this committee") : null,
       el("p", {}, here.length ? `${here.length} active bill${here.length === 1 ? "" : "s"} here.` : "No bills with an action in the last 30 days are here."),
       el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${members.get(bill.sponsor)?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
       here.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${here.length}.`) : null,
@@ -335,6 +412,7 @@ export function createPanel(world: World, actions: PanelActions) {
     el("p", {}, "Party is shown by the pin on each figure and in this panel: ", pin("D"), "Democrat, ", pin("R"), "Republican, ", pin("I"), "Independent."),
     el("p", {}, "The figures are generated at random from each member's ID. They are not likenesses."),
     el("p", {}, "Click the House or the Senate to step inside. The floor plan is invented, and what the figures do there (eating, reading, talking, presiding) is ambient animation, not a record of anyone’s day. Only the bills, their locations and who carried them come from the data."),
+    el("p", {}, "Every committee opens too. Its panel lists the meetings it has scheduled and held, with the bills taken up and any recorded decisions, from the public dataset ", el("a", { href: "https://huggingface.co/datasets/chrissoria/federal-committees", target: "_blank", rel: "noopener" }, "chrissoria/federal-committees"), ". The room fills when a meeting is under way, and any past meeting can be re-staged. The rooms come from six invented designs, a meeting is assumed to last two and a half hours because no end time is published, and every current member is seated because attendance is not recorded."),
     el("p", {}, "Bill summaries are written by an AI model and may describe an earlier version of a bill. Where a bill sits says nothing about its merit."),
     el("h3", {}, "Music"),
     el("p", {}, "The music is made in your browser in the style of an old game console: “Yankee Doodle” on the map and “America the Beautiful” inside the buildings, both long in the public domain. The ♪ button turns it off, and the choice is remembered."),

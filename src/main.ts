@@ -1,5 +1,5 @@
 import { createMusic } from "./audio/music";
-import { loadWorld } from "./data/load";
+import { loadCommittees, loadWorld } from "./data/load";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
 
@@ -65,7 +65,7 @@ async function main() {
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       $("fit").textContent = inside ? "Whole building" : "Whole map";
-      $("stamp").textContent = inside ? `Inside the ${inside} · the comings and goings are animation` : stamp;
+      $("stamp").textContent = inside ? `Inside ${inside.label} · ${inside.note}` : stamp;
     },
     onReady() {
       loading.remove();
@@ -75,6 +75,8 @@ async function main() {
         billsAt: (key) => scene.billsAt(key),
         siteOf: (id) => scene.siteOf(id),
         siteByKey: (key) => scene.siteByKey(key),
+        committee: (code) => loadCommittees().then((file) => file.committees[code], () => undefined),
+        stage: (code, meetingId) => scene.stage(code, meetingId),
       });
       replayButton.hidden = !scene.hasEvents;
       const initial = targetFromHash();

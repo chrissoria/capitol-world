@@ -1,4 +1,6 @@
 import Phaser from "phaser";
+import { loadCommittees } from "../data/load";
+import { liveMeeting, meetingTime } from "../data/meetings";
 import type { Bill, Member, MoveEvent, World } from "../data/types";
 import { locKey } from "../data/types";
 import {
@@ -25,9 +27,17 @@ export type Target =
 export interface SceneHooks {
   onSelect(target: Target | null): void;
   onClock(label: string | null, progress: number): void;
-  /** The view moved inside a chamber building, or back out to the map (null). */
-  onPlace(inside: Wing | null): void;
+  /** The view moved inside a building, or back out to the map (null). */
+  onPlace(inside: PlaceInfo | null): void;
   onReady(): void;
+}
+
+export interface PlaceInfo {
+  /** "House", "Senate", or a committee code. */
+  place: string;
+  /** How to name it after "Inside". */
+  label: string;
+  note: string;
 }
 
 export interface Filter {
@@ -85,7 +95,9 @@ export class WorldScene extends Phaser.Scene {
   /** Legislators out on the map carrying a bill. Everyone else is inside their chamber. */
   private memberSprites = new Map<string, Phaser.GameObjects.Image>();
   private hints: Phaser.GameObjects.Text[] = [];
-  private inside: Wing | null = null;
+  private inside: string | null = null;
+  /** The place plus the meeting being re-staged there, if any. */
+  private view: string | null = null;
   private belts: { sprite: Phaser.GameObjects.TileSprite; direction: number }[] = [];
   private ring!: Phaser.GameObjects.Image;
   private outline!: Phaser.GameObjects.Graphics;
@@ -390,10 +402,12 @@ export class WorldScene extends Phaser.Scene {
     this.selected = target;
     // Go to wherever the thing is: legislators are inside their chamber unless they are out carrying a bill.
     if (target?.type === "member") {
+      // A click on someone inside a building selects them where they are; anything else goes to their chamber.
       const chamber = this.members.get(target.id)?.chamber;
       if (this.memberSprites.has(target.id)) this.leave();
-      else if (chamber === "House" || chamber === "Senate") this.enter(chamber);
+      else if (fly && (chamber === "House" || chamber === "Senate")) this.enter(chamber);
     } else if (target?.type === "site" && target.id.startsWith("floor:")) this.enter(target.id.endsWith("Senate") ? "Senate" : "House");
+    else if (target?.type === "site" && target.id.startsWith("committee:")) this.enter(target.id.slice("committee:".length));
     else if (target) this.leave();
     this.drawSelection();
     this.interior.setSelected(target?.type === "member" ? target.id : null);
@@ -425,25 +439,69 @@ export class WorldScene extends Phaser.Scene {
     return this.scene.get("interior") as InteriorScene;
   }
 
-  get place(): Wing | null {
+  get place(): string | null {
     return this.inside;
   }
 
-  enter(wing: Wing) {
-    if (this.inside === wing) return;
+  /** Go inside a chamber ("House", "Senate") or a committee's room (its code). */
+  enter(place: string, meetingId?: string) {
+    const view = meetingId ? `${place}@${meetingId}` : place;
+    if (this.view === view) return;
     if (this.replaying) this.skipReplay();
     if (this.inside) this.scene.stop("interior");
-    this.inside = wing;
+    this.inside = place;
+    this.view = view;
     // The scene changes over on the next frame; until then it must queue, not act on, what it is told.
     this.interior.ready = false;
-    this.scene.launch("interior", { wing });
+    const chamber = place === "House" || place === "Senate";
+    const site = this.layout.sites.get(chamber ? `floor:${place}` : `committee:${place}`);
+    if (site) {
+      // Leave the map looking at this building, so coming back out lands beside it.
+      const x = (site.rect.x + site.rect.w / 2) * TILE;
+      const y = (site.rect.y + site.rect.h / 2) * TILE;
+      if (!this.cameras.main.worldView.contains(x, y)) this.flyTo(x, y, chamber ? 0.9 : 2, 0);
+    }
     this.scene.sleep();
-    this.hooks.onPlace(wing);
+    if (chamber) {
+      this.scene.launch("interior", { place });
+      this.hooks.onPlace({ place, label: `the ${place}`, note: "the comings and goings are animation" });
+      return;
+    }
+    const label = `the ${site?.label ?? "committee room"}`;
+    this.hooks.onPlace({ place, label, note: "opening the room…" });
+    void loadCommittees()
+      .then((file) => file.committees[place], () => undefined)
+      .then((info) => {
+        if (this.view !== view) return; // the visitor has moved on
+        const meeting = info && (meetingId ? info.meetings.find((entry) => entry.id === meetingId) : liveMeeting(info));
+        this.scene.launch("interior", {
+          place,
+          committee: {
+            code: place,
+            name: site?.label ?? info?.name ?? place,
+            chamber: info?.chamber ?? site?.wing ?? "House",
+            seats: info?.members ?? [],
+            session: meeting ? { id: meeting.id, witnesses: meeting.n_witnesses } : null,
+          },
+        });
+        const note = !meeting
+          ? "not meeting right now"
+          : meetingId
+            ? `re-staging the ${meeting.type.toLowerCase()} of ${meetingTime(meeting).split(",").slice(0, 2).join(",")}`
+            : "in session now";
+        this.hooks.onPlace({ place, label, note });
+      });
+  }
+
+  /** Show a committee's room as it would have been for one of its meetings. */
+  stage(code: string, meetingId: string) {
+    this.enter(code, meetingId);
   }
 
   leave() {
     if (!this.inside) return;
     this.inside = null;
+    this.view = null;
     this.interior.ready = false;
     this.scene.stop("interior");
     this.scene.wake();
@@ -818,12 +876,17 @@ function formatDay(day: string): string {
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
+const siteKeyOfPlace = (place: string) => (place === "House" || place === "Senate" ? `floor:${place}` : `committee:${place}`);
+
 export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks): WorldScene {
   const scene = new WorldScene(world, hooks);
   const interior = new InteriorScene(world, {
     pick: (id) => scene.select({ type: "member", id }, false),
-    floor: (wing) => scene.select({ type: "site", id: `floor:${wing}` }, false),
-    floorCount: (wing) => scene.billsAt(`floor:${wing}`).length,
+    pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place) }, false),
+    pileInfo: (place) => ({
+      count: scene.billsAt(siteKeyOfPlace(place)).length,
+      label: place === "House" || place === "Senate" ? "on the floor" : "with the committee",
+    }),
   });
   const game = new Phaser.Game({
     type: Phaser.AUTO,

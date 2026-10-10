@@ -520,3 +520,46 @@ a {
 .explain summary:focus-visible {
   outline: 3px solid var(--yellow);
 }
+
+.list a.meeting {
+  display: block;
+  padding: 7px 4px;
+  color: var(--ink);
+  font-weight: normal;
+  text-decoration: none;
+}
+
+.list a.meeting:hover {
+  background: #fff;
+}
+
+.explain .list {
+  margin: 0 6px 6px;
+}
+
+.explain.meeting summary {
+  color: var(--ink);
+  font-weight: normal;
+}
+
+.explain.meeting summary .row-title {
+  display: inline;
+  font-weight: bold;
+}
+
+.explain.meeting summary .row-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 14px;
+}
+
+.outcomes {
+  margin: 4px 10px 8px 26px;
+  padding: 0;
+  font-size: 13px;
+}
+
+.outcomes li {
+  margin-bottom: 4px;
+}

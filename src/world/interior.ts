@@ -4,15 +4,22 @@
 import Phaser from "phaser";
 import type { Member, World } from "../data/types";
 import { PALETTE, SPRITE_H, box, canvas, drawFigures, framed, type Look } from "./art";
-import { T, buildBuilding, findPath, spotXY, type Building, type Spot, type SpotKind, type Wing } from "./building";
+import { T, buildBuilding, buildCommitteeRoom, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
 import { panZoom, type PanZoom } from "./camera";
 
 export interface InteriorHooks {
   /** A legislator was clicked. */
   pick(memberId: string): void;
-  /** The pile of bills on the clerks' desk was clicked. */
-  floor(wing: Wing): void;
-  floorCount(wing: Wing): number;
+  /** The pile of bills on the clerk's desk was clicked. */
+  pile(place: string): void;
+  /** How many bills are in that pile, and what to call it. */
+  pileInfo(place: string): { count: number; label: string };
+}
+
+/** What to show inside: a chamber by name, or a committee's hearing room. */
+export interface InteriorPlace {
+  place: string; // "House", "Senate", or a committee code
+  committee?: CommitteeRoomSpec;
 }
 
 const FONT = '"Trebuchet MS", "Verdana", sans-serif';
@@ -51,6 +58,7 @@ const STAFF: { key: string; look: Look }[] = [
   ...[0, 1, 2, 3, 4, 5].map((i) => ({ key: `reporter-${i}`, look: { seed: `reporter-${i}`, party: null } })),
   { key: "guard-0", look: { seed: "guard-0", party: null, coat: "#2c3a5a", cap: "#1f2a44" } },
   { key: "librarian-0", look: { seed: "librarian-0", party: null, coat: "#7a4f6a" } },
+  ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ key: `guest-${i}`, look: { seed: `guest-${i}`, party: null } })),
   ...[0, 1, 2, 3, 4].map((i) => ({ key: `page-${i}`, look: { seed: `page-${i}`, party: null, coat: "#2f4a7a" } })),
 ];
 
@@ -109,6 +117,10 @@ function drawTray(): HTMLCanvasElement {
 export class InteriorScene extends Phaser.Scene {
   ready = false;
   wing: Wing = "House";
+  private place = "House";
+  private committee: CommitteeRoomSpec | undefined;
+  private speaker: Agent | null = null;
+  private nextSpeakerAt = 0;
   private plans = new Map<Wing, Building>();
   private b!: Building;
   private agents = new Map<string, Agent>();
@@ -134,22 +146,36 @@ export class InteriorScene extends Phaser.Scene {
     super({ key: "interior", active: false });
   }
 
-  init(data: { wing?: Wing }) {
-    this.wing = data.wing ?? "House";
+  init(data: Partial<InteriorPlace>) {
+    this.place = data.place ?? "House";
+    this.committee = data.committee;
+    this.wing = this.committee ? (this.committee.chamber === "Senate" ? "Senate" : "House") : this.place === "Senate" ? "Senate" : "House";
   }
 
   // ── Setup ──────────────────────────────────────────────────────────────────
 
   create() {
     const wing = this.wing;
-    const members = this.world.members.filter((member) => member.chamber === wing);
-    let plan = this.plans.get(wing);
-    if (!plan) {
-      const leaders: Record<string, string> = this.world.roles?.leaders ?? {};
-      plan = buildBuilding(wing, members, { speaker: leaders.speaker, majority: leaders[wing] });
-      this.plans.set(wing, plan);
+    let members: Member[];
+    let plan: Building | undefined;
+    if (this.committee) {
+      // A committee room is drawn afresh each visit: it differs with the meeting being shown.
+      const known = new Map(this.world.members.map((member) => [member.id, member]));
+      const spec = { ...this.committee, seats: this.committee.seats.filter((seat) => known.has(seat.id)) };
+      plan = buildCommitteeRoom(spec);
+      members = spec.session ? spec.seats.map((seat) => known.get(seat.id)!) : [];
+    } else {
+      members = this.world.members.filter((member) => member.chamber === wing);
+      plan = this.plans.get(wing);
+      if (!plan) {
+        const leaders: Record<string, string> = this.world.roles?.leaders ?? {};
+        plan = buildBuilding(wing, members, { speaker: leaders.speaker, majority: leaders[wing] });
+        this.plans.set(wing, plan);
+      }
     }
     const b = (this.b = plan);
+    this.speaker = null;
+    this.nextSpeakerAt = 0;
     this.clock = 0;
     this.hoverId = null;
     this.agents.clear();
@@ -163,10 +189,10 @@ export class InteriorScene extends Phaser.Scene {
     this.majority = republicans * 2 >= members.length ? "R" : "D";
 
     this.makeTextures();
-    this.add.image(0, 0, `inside-${wing}`).setOrigin(0).setDepth(DEPTH.ground);
+    this.add.image(0, 0, `inside-${b.key}`).setOrigin(0).setDepth(DEPTH.ground);
     for (let row = 0; row < b.h; row++) {
       this.add
-        .image(0, row * T, `furniture-${wing}`, row)
+        .image(0, row * T, `furniture-${b.key}`, row)
         .setOrigin(0)
         .setDepth(DEPTH.sorted + ((row + 1) * T) / 10000);
     }
@@ -193,6 +219,11 @@ export class InteriorScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.ready = false;
       if (this.onResize) this.scale.off("resize", this.onResize);
+      if (this.committee) {
+        // Committee rooms are one-offs; do not keep their artwork in memory.
+        this.textures.remove(`inside-${b.key}`);
+        this.textures.remove(`furniture-${b.key}`);
+      }
     });
 
     this.ready = true;
@@ -205,9 +236,9 @@ export class InteriorScene extends Phaser.Scene {
 
   private makeTextures() {
     const b = this.b;
-    if (!this.textures.exists(`inside-${b.wing}`)) {
-      this.textures.addCanvas(`inside-${b.wing}`, b.ground);
-      const furniture = this.textures.addCanvas(`furniture-${b.wing}`, b.over)!;
+    if (!this.textures.exists(`inside-${b.key}`)) {
+      this.textures.addCanvas(`inside-${b.key}`, b.ground);
+      const furniture = this.textures.addCanvas(`furniture-${b.key}`, b.over)!;
       for (let row = 0; row < b.h; row++) furniture.add(row, 0, 0, row * T, b.w * T, T);
     }
     if (this.textures.exists("staff")) return;
@@ -235,13 +266,13 @@ export class InteriorScene extends Phaser.Scene {
 
   /** The bills on this chamber's floor, piled on the clerks' desk. */
   private makeFloorPile() {
-    const count = this.hooks.floorCount(this.wing);
+    const { count, label: caption } = this.hooks.pileInfo(this.place);
     const { x, y } = this.b.clerk;
     const depth = DEPTH.sorted + (y + 24) / 10000;
     for (let i = 0; i < Math.min(count, 7); i++) {
       this.add.image(x - 30 + i * 10, y - (i % 2) * 2, `paper-${this.wing}`).setDepth(depth);
     }
-    const label = this.text(x, y - 9, count ? `${count} on the floor` : "", 7, PALETTE.yellow).setOrigin(0.5, 1);
+    const label = this.text(x, y - 9, count ? `${count} ${caption}` : "", 7, PALETTE.yellow).setOrigin(0.5, 1);
     label.setDepth(DEPTH.emote);
     const zone = this.add
       .zone(x - 40, y - 12, 80, 22)
@@ -298,6 +329,10 @@ export class InteriorScene extends Phaser.Scene {
           .setOrigin(0.5, 1)
           .setDepth(DEPTH.emote - 1);
       }
+      if (this.committee) {
+        agent.until = Number.POSITIVE_INFINITY; // in a meeting, members stay at the dais
+        continue;
+      }
       // Start with the building already busy rather than everyone in their seat.
       if (Math.random() < 0.45 && this.planOuting(agent)) {
         const last = agent.steps.pop()!;
@@ -341,7 +376,7 @@ export class InteriorScene extends Phaser.Scene {
       if (pointer.getDistance() > 8) return;
       const member = object.getData("member") as string | undefined;
       if (member) this.hooks.pick(member);
-      else if (object.getData("floor")) this.hooks.floor(this.wing);
+      else if (object.getData("floor")) this.hooks.pile(this.place);
     });
   }
 
@@ -379,8 +414,10 @@ export class InteriorScene extends Phaser.Scene {
     const camera = this.cameras.main;
     const width = this.b.w * T;
     const height = this.b.h * T;
-    const zoom = Math.min(camera.width / (width + 48), camera.height / (height + 48));
-    this.pz.flyTo(width / 2, height / 2, zoom, duration);
+    // Leave room at the top for the title and buttons that sit over the view.
+    const header = Math.min(96, camera.height * 0.22);
+    const zoom = Math.min(camera.width / (width + 48), (camera.height - header) / (height + 32));
+    this.pz.flyTo(width / 2, height / 2 - header / 2 / zoom, zoom, duration);
   }
 
   // ── The daily bustle ───────────────────────────────────────────────────────
@@ -536,6 +573,7 @@ export class InteriorScene extends Phaser.Scene {
         agent.emote.setVisible(showEmotes && (!talking || (this.clock + agent.phase) % 2600 < 1300));
       }
     }
+    if (this.committee?.session && this.clock >= this.nextSpeakerAt) this.passTheFloor();
     this.applyLod();
     if (this.selectedId) {
       const agent = this.agents.get(this.selectedId);
@@ -545,6 +583,19 @@ export class InteriorScene extends Phaser.Scene {
       this.lastLabelPass = time;
       this.placeNameLabels();
     }
+  }
+
+  /** In a meeting, one member at a time has the floor. */
+  private passTheFloor() {
+    const seated = [...this.agents.values()].filter((agent) => agent.member);
+    this.speaker?.emote?.destroy();
+    if (this.speaker) this.speaker.emote = null;
+    this.speaker = seated.length ? seated[Math.floor(Math.random() * seated.length)] : null;
+    if (this.speaker) {
+      const { x, y } = this.speaker.sprite;
+      this.speaker.emote = this.add.image(x + 7, y - SPRITE_H, "emote-talk").setOrigin(0.5, 1).setDepth(DEPTH.emote);
+    }
+    this.nextSpeakerAt = this.clock + seconds(2.5, 6);
   }
 
   // ── Level of detail ────────────────────────────────────────────────────────

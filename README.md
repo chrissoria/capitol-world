@@ -13,6 +13,14 @@ walk somewhere, do something and come back. That bustle is ambient animation on
 an invented floor plan; only the bills, where they are and who carried them come
 from the data.
 
+Every committee building opens as well, into one of six hearing-room designs
+sized to its membership. The panel shows the committee's calendar (meetings
+scheduled and held, the bills taken up, recorded decisions), and the room fills
+with its members when a meeting is under way or when a past one is re-staged.
+That comes from `world/committees.json`, built from the
+[chrissoria/federal-committees](https://huggingface.co/datasets/chrissoria/federal-committees)
+dataset.
+
 The Stats tab counts every measure of the Congress by the date it was
 introduced (the latest day, 7 days, 30 days, 12 months or the whole Congress)
 and shows how far those measures have got, split by the sponsor's party.
@@ -52,7 +60,8 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/world/layout.ts` the map: sites, streets and routes
 - `src/world/art.ts` map artwork and figures, drawn at runtime from one palette (no image files)
 - `src/world/scene.ts` the map scene: camera, bills at their sites, the replay
-- `src/world/building.ts` a chamber building's floor plan, furniture, places to be, and path finding
+- `src/world/building.ts` floor plans (the two chambers, six committee-room templates), furniture, places to be, path finding
+- `src/data/meetings.ts` committee rosters and meetings
 - `src/world/interior.ts` the inside scene: who is where and what they do next
 - `src/world/camera.ts` pan and zoom, shared by both scenes
 - `src/ui/panel.ts` the side panel: inspector, search, filters, about

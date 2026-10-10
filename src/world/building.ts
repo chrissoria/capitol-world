@@ -3,7 +3,7 @@
 // like the rest of the art. The floor plan is invented; it is not the real one.
 
 import type { Member } from "../data/types";
-import { PALETTE, box, canvas, framed, rng } from "./art";
+import { PALETTE, box, canvas, framed, hash, rng } from "./art";
 
 export const T = 16;
 export type Wing = "House" | "Senate";
@@ -58,6 +58,8 @@ export interface StaffSpot {
 }
 
 export interface Building {
+  /** Names this floor plan's textures. */
+  key: string;
   wing: Wing;
   w: number;
   h: number;
@@ -106,27 +108,11 @@ export function spotXY(spot: { tx: number; ty: number; dx?: number }): { x: numb
   return { x: spot.tx * T + 8 + (spot.dx ?? 0), y: spot.ty * T + 13 };
 }
 
-export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): Building {
-  const order = (list: Member[]) => [...list].sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
-  const left = order(members.filter((m) => m.party !== "R"));
-  const right = order(members.filter((m) => m.party === "R"));
-  const bc = members.length > 200 ? 10 : 5; // seats across one block
-  const rows = Math.max(3, Math.ceil(Math.max(left.length, right.length) / (2 * bc)));
-  const cw = 4 * bc + 6;
-  const ch = 9 + 2 * rows;
-  const CW = cw + 2;
-  const CH = ch + 2;
-  const W = 2 * SIDE + 2 * COR + CW;
-  const H = NORTH + 2 * COR + CH + SOUTH;
-  const house = wing === "House";
-  const accent = house ? PALETTE.house : PALETTE.senate;
-  const accentDark = house ? PALETTE.houseDark : PALETTE.senateDark;
-  const carpet = house ? PALETTE.houseCarpet : PALETTE.senateCarpet;
-  const carpetDot = house ? "#b5dccd" : "#d2c0e3";
-
+/** The drawing surfaces, the grid, and the furniture every floor plan is built from. */
+function makeKit(W: number, H: number, carpet: string, carpetDot: string, seed: number) {
   const [ground, g] = canvas(W * T, H * T);
   const [over, o] = canvas(W * T, H * T);
-  const random = rng(house ? 435 : 100);
+  const random = rng(seed);
   const pick = <V>(list: readonly V[]) => list[Math.floor(random() * list.length)];
 
   const cells = new Uint8Array(W * H).fill(FLOOR);
@@ -185,131 +171,79 @@ export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): 
     }
   };
 
-  const chamberX = SIDE + COR;
-  const chamberY = NORTH + COR;
-  const southY = H - SOUTH;
-  const topH = Math.ceil((CH + 1) / 2);
-  const lowY = chamberY + topH - 1;
-  const lowH = CH - topH + 1;
-  const eastX = W - SIDE;
-  const lobbyX = Math.floor((W - LOBBY) / 2);
-  const pressX = lobbyX + LOBBY - 1;
-  const pressW = Math.floor((W - pressX + 1) / 2);
-  const gymX = pressX + pressW - 1;
 
-  const officeCount = Math.round((W - 1) / 11);
-  const officeNames: { label: string; owner?: string; clerk?: boolean }[] = [];
-  for (let i = 0; i < officeCount; i++) officeNames.push({ label: "Members’ Offices" });
-  const centre = Math.floor(officeCount / 2);
-  if (house) {
-    officeNames[centre - 1] = { label: "Speaker’s Office", owner: leaders.speaker };
-    officeNames[centre] = { label: "Majority Leader’s Office", owner: leaders.majority };
-    officeNames[centre + 1] = { label: "Clerk’s Office", clerk: true };
-  } else {
-    officeNames[centre - 1] = { label: "Majority Leader’s Office", owner: leaders.majority };
-    officeNames[centre] = { label: "Secretary’s Office", clerk: true };
-  }
-  const offices = officeNames.map((info, i) => {
-    const x1 = Math.round((i * (W - 1)) / officeCount);
-    const x2 = Math.round(((i + 1) * (W - 1)) / officeCount);
-    return { info, inner: room(`office-${i}`, info.label, x1, 0, x2 - x1 + 1, NORTH, "wood"), x1, x2 };
-  });
-  const cloakD = room("cloak-d", "Democratic Cloakroom", 0, chamberY, SIDE, topH, "green");
-  const library = room("library", "Library", 0, lowY, SIDE, lowH, "wood");
-  const cloakR = room("cloak-r", "Republican Cloakroom", eastX, chamberY, SIDE, topH, "green");
-  const hearing = room("hearing", "Hearing Room", eastX, lowY, SIDE, lowH, "blue");
-  const cafe = room("cafeteria", "Cafeteria", 0, southY, lobbyX + 1, SOUTH, "tile");
-  const lobby = room("rotunda", "Rotunda", lobbyX, southY, LOBBY, SOUTH, "marble");
-  const press = room("press", "Press Room", pressX, southY, pressW, SOUTH, "blue");
-  const gym = room("gym", "Gym", gymX, southY, W - gymX, SOUTH, "rubber");
-  const hall = room("chamber", `${wing} Chamber`, chamberX, chamberY, CW, CH, "carpet");
-
-  const mid = hall.ix + 2 * bc + 2; // left column of the centre aisle
-  const crossRow = hall.iy + 6;
-  for (const office of offices) door(office.x1 + Math.floor((office.x2 - office.x1) / 2), NORTH - 1);
-  door(SIDE - 1, chamberY + Math.floor(topH / 2), 1, 2);
-  door(SIDE - 1, lowY + Math.floor(lowH / 2), 1, 2);
-  door(eastX, chamberY + Math.floor(topH / 2), 1, 2);
-  door(eastX, lowY + Math.floor(lowH / 2), 1, 2);
-  door(mid, chamberY + CH - 1, 2);
-  door(chamberX, crossRow);
-  door(chamberX + CW - 1, crossRow);
-  door(cafe.ix + Math.max(6, Math.min(10, Math.floor(cafe.iw * 0.32))) + 1, southY, 2);
-  door(cafe.ix + cafe.iw - 5, southY, 2);
-  door(lobby.ix + lobby.iw / 2 - 4, southY, 8);
-  door(press.ix + press.iw - 1, southY);
-  door(gym.ix + 1, southY);
-
-  // ── Floors and walls ───────────────────────────────────────────────────────
-
-  const isWall = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < W && ty < H && cells[ty * W + tx] === WALL;
-  for (let ty = 0; ty < H; ty++) {
-    for (let tx = 0; tx < W; tx++) {
-      const x = tx * T;
-      const y = ty * T;
-      if (isWall(tx, ty)) continue;
-      switch (floors[ty * W + tx]) {
-        case "corridor":
-          box(g, x, y, T, T, (tx + ty) % 2 ? "#e9e3d3" : "#e2dbc9");
-          box(g, x, y + T - 1, T, 1, "#d3cbb6");
-          box(g, x + T - 1, y, 1, T, "#d3cbb6");
-          break;
-        case "carpet":
-          box(g, x, y, T, T, carpet);
-          if ((tx + ty) % 2) box(g, x + 7, y + 7, 2, 2, carpetDot);
-          break;
-        case "wood":
-          box(g, x, y, T, T, "#cfa46d");
-          box(g, x, y + 7, T, 1, WOOD);
-          box(g, x, y + 15, T, 1, WOOD);
-          box(g, x + (tx % 2 ? 4 : 11), y, 1, 7, WOOD);
-          box(g, x + (tx % 2 ? 12 : 3), y + 8, 1, 7, WOOD);
-          break;
-        case "tile":
-          box(g, x, y, T, T, (tx + ty) % 2 ? "#f4f1e8" : "#d6e3e6");
-          break;
-        case "green":
-          box(g, x, y, T, T, "#5f9a78");
-          box(g, x + 7, y + 3, 2, 2, "#4f8767");
-          box(g, x + 3, y + 11, 2, 2, "#73ad8a");
-          break;
-        case "marble":
-          box(g, x, y, T, T, "#f1ebdf");
-          box(g, x, y + T - 1, T, 1, "#ddd5c4");
-          box(g, x + T - 1, y, 1, T, "#ddd5c4");
-          if ((tx + ty) % 2 === 0) box(g, x + 6, y + 6, 3, 3, PALETTE.stoneEdge);
-          break;
-        case "blue":
-          box(g, x, y, T, T, "#8395b8");
-          box(g, x + 3, y + 4, 2, 1, "#7486aa");
-          box(g, x + 10, y + 11, 2, 1, "#7486aa");
-          break;
-        case "rubber":
-          box(g, x, y, T, T, "#5f6b82");
-          box(g, x + 4, y + 5, 1, 1, "#7d8aa3");
-          box(g, x + 11, y + 12, 1, 1, "#7d8aa3");
-          break;
+  /** Paint the floors and walls. Call once the rooms and doors are laid out, before any furniture. */
+  const paint = () => {
+    const isWall = (tx: number, ty: number) => tx >= 0 && ty >= 0 && tx < W && ty < H && cells[ty * W + tx] === WALL;
+    for (let ty = 0; ty < H; ty++) {
+      for (let tx = 0; tx < W; tx++) {
+        const x = tx * T;
+        const y = ty * T;
+        if (isWall(tx, ty)) continue;
+        switch (floors[ty * W + tx]) {
+          case "corridor":
+            box(g, x, y, T, T, (tx + ty) % 2 ? "#e9e3d3" : "#e2dbc9");
+            box(g, x, y + T - 1, T, 1, "#d3cbb6");
+            box(g, x + T - 1, y, 1, T, "#d3cbb6");
+            break;
+          case "carpet":
+            box(g, x, y, T, T, carpet);
+            if ((tx + ty) % 2) box(g, x + 7, y + 7, 2, 2, carpetDot);
+            break;
+          case "wood":
+            box(g, x, y, T, T, "#cfa46d");
+            box(g, x, y + 7, T, 1, WOOD);
+            box(g, x, y + 15, T, 1, WOOD);
+            box(g, x + (tx % 2 ? 4 : 11), y, 1, 7, WOOD);
+            box(g, x + (tx % 2 ? 12 : 3), y + 8, 1, 7, WOOD);
+            break;
+          case "tile":
+            box(g, x, y, T, T, (tx + ty) % 2 ? "#f4f1e8" : "#d6e3e6");
+            break;
+          case "green":
+            box(g, x, y, T, T, "#5f9a78");
+            box(g, x + 7, y + 3, 2, 2, "#4f8767");
+            box(g, x + 3, y + 11, 2, 2, "#73ad8a");
+            break;
+          case "marble":
+            box(g, x, y, T, T, "#f1ebdf");
+            box(g, x, y + T - 1, T, 1, "#ddd5c4");
+            box(g, x + T - 1, y, 1, T, "#ddd5c4");
+            if ((tx + ty) % 2 === 0) box(g, x + 6, y + 6, 3, 3, PALETTE.stoneEdge);
+            break;
+          case "blue":
+            box(g, x, y, T, T, "#8395b8");
+            box(g, x + 3, y + 4, 2, 1, "#7486aa");
+            box(g, x + 10, y + 11, 2, 1, "#7486aa");
+            break;
+          case "rubber":
+            box(g, x, y, T, T, "#5f6b82");
+            box(g, x + 4, y + 5, 1, 1, "#7d8aa3");
+            box(g, x + 11, y + 12, 1, 1, "#7d8aa3");
+            break;
+        }
       }
     }
-  }
-  for (let ty = 0; ty < H; ty++) {
-    for (let tx = 0; tx < W; tx++) {
-      if (!isWall(tx, ty)) continue;
-      const x = tx * T;
-      const y = ty * T;
-      const faces = ty < H - 1 && !isWall(tx, ty + 1); // a wall you see the front of
-      box(g, x, y, T, T, CAP);
-      if (faces) {
-        box(g, x, y + 4, T, T - 4, PALETTE.wall);
-        box(g, x, y + 4, T, 1, PALETTE.ink);
-        box(g, x, y + T - 3, T, 3, PALETTE.wallShade);
+    for (let ty = 0; ty < H; ty++) {
+      for (let tx = 0; tx < W; tx++) {
+        if (!isWall(tx, ty)) continue;
+        const x = tx * T;
+        const y = ty * T;
+        const faces = ty < H - 1 && !isWall(tx, ty + 1); // a wall you see the front of
+        box(g, x, y, T, T, CAP);
+        if (faces) {
+          box(g, x, y + 4, T, T - 4, PALETTE.wall);
+          box(g, x, y + 4, T, 1, PALETTE.ink);
+          box(g, x, y + T - 3, T, 3, PALETTE.wallShade);
+        }
+        if (!isWall(tx - 1, ty)) box(g, x, y, 1, T, PALETTE.ink);
+        if (!isWall(tx + 1, ty)) box(g, x + T - 1, y, 1, T, PALETTE.ink);
+        if (!isWall(tx, ty - 1)) box(g, x, y, T, 1, PALETTE.ink);
+        if (ty === H - 1) box(g, x, y + T - 1, T, 1, PALETTE.ink);
       }
-      if (!isWall(tx - 1, ty)) box(g, x, y, 1, T, PALETTE.ink);
-      if (!isWall(tx + 1, ty)) box(g, x + T - 1, y, 1, T, PALETTE.ink);
-      if (!isWall(tx, ty - 1)) box(g, x, y, T, 1, PALETTE.ink);
-      if (ty === H - 1) box(g, x, y + T - 1, T, 1, PALETTE.ink);
     }
-  }
+
+  };
 
   // ── Furniture ──────────────────────────────────────────────────────────────
 
@@ -480,6 +414,102 @@ export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): 
     box(o, x + 1, y + 1, 7, 4, PALETTE.window);
     box(o, x + 3, y + 7, 3, 2, PALETTE.ink);
   };
+
+  const bust = (tx: number, ty: number) => {
+    const x = tx * T;
+    const y = ty * T;
+    framed(o, x + 2, y + 2, 12, 13, PALETTE.stone);
+    box(o, x + 3, y + 11, 10, 3, PALETTE.stoneEdge);
+    framed(o, x + 4, y - 11, 8, 14, "#cfd3d6");
+    framed(o, x + 5, y - 18, 6, 8, "#cfd3d6");
+    block(tx, ty);
+  };
+  return {
+    ground, over, g, o, cells, rooms, spots, staff, seats, pick, set, block, spot, person, room, door, paint,
+    table, chairDown, chairUp, sofa, shelf, plant, lectern, flag, vending, cooler, coatRack, tripod, treadmill,
+    rug, picture, windowAt, papers, monitor, bust,
+  };
+}
+
+export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): Building {
+  const order = (list: Member[]) => [...list].sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
+  const left = order(members.filter((m) => m.party !== "R"));
+  const right = order(members.filter((m) => m.party === "R"));
+  const bc = members.length > 200 ? 10 : 5; // seats across one block
+  const rows = Math.max(3, Math.ceil(Math.max(left.length, right.length) / (2 * bc)));
+  const cw = 4 * bc + 6;
+  const ch = 9 + 2 * rows;
+  const CW = cw + 2;
+  const CH = ch + 2;
+  const W = 2 * SIDE + 2 * COR + CW;
+  const H = NORTH + 2 * COR + CH + SOUTH;
+  const house = wing === "House";
+  const accent = house ? PALETTE.house : PALETTE.senate;
+  const accentDark = house ? PALETTE.houseDark : PALETTE.senateDark;
+  const carpet = house ? PALETTE.houseCarpet : PALETTE.senateCarpet;
+  const carpetDot = house ? "#b5dccd" : "#d2c0e3";
+
+  const kit = makeKit(W, H, carpet, carpetDot, house ? 435 : 100);
+  const { ground, over, g, o, cells, rooms, spots, staff, seats, set, block, spot, person, room, door } = kit;
+  const { table, chairDown, chairUp, sofa, shelf, plant, lectern, flag, vending, cooler, coatRack, tripod, treadmill } = kit;
+  const { rug, picture, windowAt, papers, monitor, pick } = kit;
+
+  const chamberX = SIDE + COR;
+  const chamberY = NORTH + COR;
+  const southY = H - SOUTH;
+  const topH = Math.ceil((CH + 1) / 2);
+  const lowY = chamberY + topH - 1;
+  const lowH = CH - topH + 1;
+  const eastX = W - SIDE;
+  const lobbyX = Math.floor((W - LOBBY) / 2);
+  const pressX = lobbyX + LOBBY - 1;
+  const pressW = Math.floor((W - pressX + 1) / 2);
+  const gymX = pressX + pressW - 1;
+
+  const officeCount = Math.round((W - 1) / 11);
+  const officeNames: { label: string; owner?: string; clerk?: boolean }[] = [];
+  for (let i = 0; i < officeCount; i++) officeNames.push({ label: "Members’ Offices" });
+  const centre = Math.floor(officeCount / 2);
+  if (house) {
+    officeNames[centre - 1] = { label: "Speaker’s Office", owner: leaders.speaker };
+    officeNames[centre] = { label: "Majority Leader’s Office", owner: leaders.majority };
+    officeNames[centre + 1] = { label: "Clerk’s Office", clerk: true };
+  } else {
+    officeNames[centre - 1] = { label: "Majority Leader’s Office", owner: leaders.majority };
+    officeNames[centre] = { label: "Secretary’s Office", clerk: true };
+  }
+  const offices = officeNames.map((info, i) => {
+    const x1 = Math.round((i * (W - 1)) / officeCount);
+    const x2 = Math.round(((i + 1) * (W - 1)) / officeCount);
+    return { info, inner: room(`office-${i}`, info.label, x1, 0, x2 - x1 + 1, NORTH, "wood"), x1, x2 };
+  });
+  const cloakD = room("cloak-d", "Democratic Cloakroom", 0, chamberY, SIDE, topH, "green");
+  const library = room("library", "Library", 0, lowY, SIDE, lowH, "wood");
+  const cloakR = room("cloak-r", "Republican Cloakroom", eastX, chamberY, SIDE, topH, "green");
+  const hearing = room("hearing", "Hearing Room", eastX, lowY, SIDE, lowH, "blue");
+  const cafe = room("cafeteria", "Cafeteria", 0, southY, lobbyX + 1, SOUTH, "tile");
+  const lobby = room("rotunda", "Rotunda", lobbyX, southY, LOBBY, SOUTH, "marble");
+  const press = room("press", "Press Room", pressX, southY, pressW, SOUTH, "blue");
+  const gym = room("gym", "Gym", gymX, southY, W - gymX, SOUTH, "rubber");
+  const hall = room("chamber", `${wing} Chamber`, chamberX, chamberY, CW, CH, "carpet");
+
+  const mid = hall.ix + 2 * bc + 2; // left column of the centre aisle
+  const crossRow = hall.iy + 6;
+  for (const office of offices) door(office.x1 + Math.floor((office.x2 - office.x1) / 2), NORTH - 1);
+  door(SIDE - 1, chamberY + Math.floor(topH / 2), 1, 2);
+  door(SIDE - 1, lowY + Math.floor(lowH / 2), 1, 2);
+  door(eastX, chamberY + Math.floor(topH / 2), 1, 2);
+  door(eastX, lowY + Math.floor(lowH / 2), 1, 2);
+  door(mid, chamberY + CH - 1, 2);
+  door(chamberX, crossRow);
+  door(chamberX + CW - 1, crossRow);
+  door(cafe.ix + Math.max(6, Math.min(10, Math.floor(cafe.iw * 0.32))) + 1, southY, 2);
+  door(cafe.ix + cafe.iw - 5, southY, 2);
+  door(lobby.ix + lobby.iw / 2 - 4, southY, 8);
+  door(press.ix + press.iw - 1, southY);
+  door(gym.ix + 1, southY);
+
+  kit.paint();
 
   // Offices along the north side.
   for (const { info, inner } of offices) {
@@ -839,6 +869,7 @@ export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): 
   for (const office of offices) picture(office.x1 + 2, NORTH - 1, 2);
 
   return {
+    key: wing,
     wing,
     w: W,
     h: H,
@@ -851,6 +882,219 @@ export function buildBuilding(wing: Wing, members: Member[], leaders: Leaders): 
     pages: house ? 5 : 3,
     cells,
     clerk: { x: (mid + 1) * T, y: (hall.iy + 3) * T - 2 },
+  };
+}
+
+export interface CommitteeSeat {
+  id: string;
+  side: string; // "majority" or "minority"
+  rank: number;
+  title: string;
+}
+
+export interface CommitteeRoomSpec {
+  code: string;
+  name: string;
+  chamber: string;
+  seats: CommitteeSeat[];
+  /** Set when a meeting is being shown: who is at the witness table and how full the room is. */
+  session: { id: string; witnesses: number } | null;
+}
+
+/** Six looks for a hearing room. Each committee always gets the same one. */
+const ROOM_TEMPLATES = [
+  { name: "classic", floor: "carpet", wall: "drapes", sides: "plants", public: "rows" },
+  { name: "library", floor: "wood", wall: "shelves", sides: "shelves", public: "rows" },
+  { name: "marble hall", floor: "marble", wall: "portraits", sides: "busts", public: "benches" },
+  { name: "press room", floor: "blue", wall: "banners", sides: "press", public: "blocks" },
+  { name: "club room", floor: "green", wall: "portraits", sides: "armchairs", public: "rows" },
+  { name: "modern", floor: "tile", wall: "screens", sides: "tables", public: "desks" },
+] as const;
+
+/** A committee's hearing room: the members' dais, a witness table, and seats for the public. */
+export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
+  const wing: Wing = spec.chamber === "Senate" ? "Senate" : "House";
+  const house = wing === "House";
+  const accent = house ? PALETTE.house : PALETTE.senate;
+  const accentDark = house ? PALETTE.houseDark : PALETTE.senateDark;
+  const majority = spec.seats.filter((seat) => seat.side === "majority").sort((a, b) => a.rank - b.rank);
+  const minority = spec.seats.filter((seat) => seat.side !== "majority").sort((a, b) => a.rank - b.rank);
+  const total = majority.length + minority.length;
+  // Big committees sit in two tiers, the senior members behind.
+  const tiers = total > 16 ? 2 : 1;
+  const perTier = Math.max(1, Math.ceil(total / tiers));
+  const backMajority = tiers === 1 ? majority.length : Math.min(majority.length, Math.round((perTier * majority.length) / Math.max(1, total)));
+  const backMinority = tiers === 1 ? minority.length : Math.min(minority.length, perTier - backMajority);
+  const left = Math.max(backMajority, majority.length - backMajority, 3);
+  const right = Math.max(backMinority, minority.length - backMinority, 3);
+  const iw = Math.max(28, left + right + 8);
+  const lastDesk = tiers * 2; // row of the front desk, counted from the first floor row
+  const ih = lastDesk + 15;
+  const W = iw + 2;
+  const H = ih + 2;
+
+  const template = ROOM_TEMPLATES[hash(spec.code) % ROOM_TEMPLATES.length];
+  const kit = makeKit(W, H, house ? PALETTE.houseCarpet : PALETTE.senateCarpet, house ? "#b5dccd" : "#d2c0e3", hash(spec.code));
+  const { ground, over, g, o, cells, rooms, spots, staff, seats, spot, person, room, door } = kit;
+  const { table, chairDown, chairUp, plant, flag, cooler, tripod, picture, papers, rug, shelf, bust, coatRack, monitor } = kit;
+
+  const { ix, iy } = room("room", spec.name, 0, 0, W, H, template.floor);
+  const boundary = ix + 4 + left + Math.floor((iw - 8 - left - right) / 2); // first minority seat
+  const centre = ix + Math.floor(iw / 2);
+  door(centre - 1, H - 1, 2);
+  kit.paint();
+
+  // The wall behind the dais: a seal in the middle, and the template's own treatment either side.
+  const wallY = (iy - 1) * T;
+  if (template.wall === "drapes") {
+    framed(g, (boundary - 4) * T, wallY + 5, 8 * T, 11, accent);
+    for (let fold = 0; fold < 8 * T; fold += 6) box(g, (boundary - 4) * T + fold, wallY + 6, 1, 9, accentDark);
+  }
+  framed(g, boundary * T - 6, wallY + 4, 12, 12, PALETTE.gold);
+  box(g, boundary * T - 3, wallY + 7, 6, 6, PALETTE.goldDark);
+  const wallSpots: number[] = [];
+  for (let tx = ix + 3; tx < boundary - 6; tx += 5) wallSpots.push(tx);
+  for (let tx = boundary + 6; tx < ix + iw - 4; tx += 5) wallSpots.push(tx);
+  for (const tx of wallSpots) {
+    const x = tx * T;
+    if (template.wall === "shelves") shelf(tx, iy, 2);
+    else if (template.wall === "banners") {
+      framed(g, x + 4, wallY + 4, 10, 12, tx % 2 ? accent : PALETTE.gold);
+      framed(g, x + 18, wallY + 4, 10, 12, tx % 2 ? PALETTE.gold : accent);
+    } else if (template.wall === "screens") {
+      framed(g, x + 2, wallY + 4, 28, 12, "#2b2530");
+      box(g, x + 4, wallY + 6, 24, 8, PALETTE.window);
+      box(g, x + 6, wallY + 8, 10, 1, PALETTE.white);
+      box(g, x + 6, wallY + 11, 16, 1, PALETTE.white);
+    } else picture(tx, iy - 1, 2);
+  }
+  flag(ix + 1, iy);
+  flag(ix + iw - 2, iy, accent);
+
+  // The dais. Majority to the left of the middle, minority to the right, senior members nearest it.
+  framed(g, (boundary - left - 1) * T - 4, iy * T + 4, (left + right + 2) * T + 8, (lastDesk + 1) * T, "#c9a06a");
+  const tierSeats: { seat: CommitteeSeat; tx: number }[][] = [];
+  for (let tier = 0; tier < tiers; tier++) {
+    const back = tier === 0;
+    const mine = back ? majority.slice(0, backMajority) : majority.slice(backMajority);
+    const theirs = back ? minority.slice(0, backMinority) : minority.slice(backMinority);
+    tierSeats.push([
+      ...mine.map((seat, i) => ({ seat, tx: boundary - 1 - i })),
+      ...theirs.map((seat, i) => ({ seat, tx: boundary + i })),
+    ]);
+  }
+  tierSeats.forEach((row, tier) => {
+    if (!row.length) return;
+    const chairs = iy + 1 + tier * 2;
+    const from = Math.min(...row.map((entry) => entry.tx));
+    const to = Math.max(...row.map((entry) => entry.tx));
+    for (const { seat, tx } of row) {
+      chairDown(tx, chairs, LEATHER_DARK);
+      seats.set(seat.id, spot("seat", tx, chairs, "down", "room", { owner: seat.id }));
+    }
+    table(from, chairs + 1, to - from + 1, WALNUT, "#4f2f18");
+    for (const { seat, tx } of row) {
+      const lead = seat.rank === 1;
+      box(o, tx * T + 4, (chairs + 1) * T - 4, 8, 3, lead ? PALETTE.gold : PALETTE.wall);
+      if (lead && seat.side === "majority") {
+        framed(o, tx * T + 3, (chairs + 1) * T + 1, 9, 4, WOOD_DARK); // the gavel
+        box(o, tx * T + 6, (chairs + 1) * T - 1, 3, 2, WOOD);
+      }
+    }
+  });
+
+  // The well: the clerk with the committee's bills, the witness table, the press.
+  const well = iy + lastDesk + 1;
+  table(ix + 2, well + 2, 4, WOOD, WOOD_DARK);
+  person("clerk-0", ix + 3, well + 1, "down");
+  const witnessSeats = Math.max(2, Math.min(6, spec.session?.witnesses || 3));
+  const tableWidth = witnessSeats * 2 + 1;
+  const tableX = centre - Math.floor(tableWidth / 2);
+  rug(tableX - 1, well + 2, tableWidth + 2, 4, accent, house ? PALETTE.houseCarpet : PALETTE.senateCarpet);
+  table(tableX, well + 3, tableWidth);
+  for (let i = 0; i < witnessSeats; i++) {
+    const tx = tableX + 1 + i * 2;
+    chairUp(tx, well + 4);
+    box(o, tx * T + 7, (well + 3) * T - 11, 1, 6, PALETTE.ink); // microphone
+    papers(tx * T + 3, (well + 3) * T - 3);
+    if (spec.session && i < spec.session.witnesses) staff.push({ frame: `guest-${i % 8}`, tx, ty: well + 4, dx: 0, face: "up" });
+  }
+  tripod(ix + iw - 3, well + 2);
+  tripod(ix + iw - 2, well + 4);
+  spot("errand", ix + 6, well + 1, "up", "room");
+  spot("errand", ix + iw - 5, well + 1, "up", "room");
+
+  // The public seats. A meeting fills them; otherwise a couple of staff wait about.
+  const publicSeats: { tx: number; ty: number }[] = [];
+  const first = well + 7;
+  if (template.public === "desks") {
+    // Rows of shared desks, each with chairs behind it.
+    for (const row of [first, first + 3]) {
+      for (let tx = ix + 3; tx + 2 <= ix + iw - 4; tx += 4) {
+        if (tx + 2 >= centre - 2 && tx <= centre + 1) continue;
+        table(tx, row, 3, "#e9e2cf", "#b9b1a0");
+        monitor(tx * T + 18, row * T - 9);
+        for (let i = 0; i < 3; i++) {
+          chairUp(tx + i, row + 1, "#3d3f4a", "#56607a");
+          publicSeats.push({ tx: tx + i, ty: row + 1 });
+        }
+      }
+    }
+  } else {
+    const benches = template.public === "benches";
+    for (let row = first; row <= first + 4; row += 2) {
+      for (let tx = ix + 3; tx <= ix + iw - 4; tx++) {
+        const third = Math.floor((iw - 6) / 3);
+        const aisle = template.public === "blocks" ? (tx - ix - 3) % (third + 1) === third : tx >= centre - 2 && tx <= centre + 1;
+        if (aisle) continue;
+        chairUp(tx, row, benches ? WOOD_DARK : "#3d3f4a", benches ? WOOD : "#56607a");
+        if (benches) box(o, tx * T, row * T + 4, T, 2, WOOD_DARK); // one long bench
+        publicSeats.push({ tx, ty: row });
+      }
+    }
+  }
+  let guest = 0;
+  publicSeats.forEach(({ tx, ty }, index) => {
+    const taken = spec.session ? (tx * 7 + ty * 13 + spec.session.id.length) % 5 < 2 : index === 4 || index === publicSeats.length - 3;
+    if (taken) staff.push({ frame: `guest-${guest++ % 8}`, tx, ty, dx: 0, face: "up" });
+  });
+
+  // Along the side walls, whatever suits the room.
+  for (const [tx, edge] of [[ix, ix], [ix + iw - 2, ix + iw - 1]] as const) {
+    for (const row of [first, first + 3]) {
+      if (template.sides === "plants") plant(edge, row);
+      else if (template.sides === "shelves") shelf(tx, row, 2);
+      else if (template.sides === "busts") bust(edge, row);
+      else if (template.sides === "press") tripod(edge, row);
+      else if (template.sides === "armchairs") {
+        chairUp(edge, row, LEATHER_DARK, LEATHER);
+        chairUp(edge, row + 1, LEATHER_DARK, LEATHER);
+      } else {
+        table(tx, row, 2);
+        papers(tx * T + 10, row * T - 3);
+      }
+    }
+  }
+  if (template.sides === "armchairs") coatRack(ix + iw - 1, first - 2);
+  plant(ix, iy + ih - 1);
+  plant(ix + iw - 1, iy + ih - 1);
+  cooler(ix, well + 5);
+  spot("errand", centre - 3, iy + ih - 1, "up", "room");
+
+  return {
+    key: `${spec.code}:${spec.session?.id ?? "idle"}`,
+    wing,
+    w: W,
+    h: H,
+    ground,
+    over,
+    rooms,
+    spots,
+    seats,
+    staff,
+    pages: 1,
+    cells,
+    clerk: { x: (ix + 4) * T, y: (well + 2) * T - 2 },
   };
 }
 
