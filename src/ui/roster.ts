@@ -72,7 +72,8 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
   search.addEventListener("input", render);
 
   // People move about, so keep the places current while the tab is open.
-  setInterval(() => {
+  const timer = setInterval(() => {
+    if (!section.isConnected) return clearInterval(timer); // another Congress was opened
     if (section.hidden || document.hidden) return;
     for (const [id, node] of places) {
       const now = whereIs(id);

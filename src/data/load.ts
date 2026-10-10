@@ -4,13 +4,24 @@ import type { CongressList, SearchIndex, World } from "./types";
 const ROOT = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
 const BUNDLED = `${import.meta.env.BASE_URL}fixtures/`;
 
-/** A finished Congress asked for with `?congress=118`, or null for the current one. */
-export const archived: number | null = (() => {
+/** The finished Congress the address asks for with `?congress=118`, or null for the current one. */
+export function congressInAddress(): number | null {
   const asked = Number(new URLSearchParams(location.search).get("congress"));
   return Number.isInteger(asked) && asked > 0 ? asked : null;
-})();
+}
+
+/** The finished Congress on show, or null for the current one. */
+export let archived: number | null = congressInAddress();
+
+/** Show another Congress (null for the current one). Its files load again when they are next asked for. */
+export function setCongress(congress: number | null) {
+  archived = congress;
+  committeeFile = undefined;
+  searchIndex = undefined;
+}
+
 // A finished Congress is built once and kept in its own folder; it has no bundled copy.
-const REMOTE = archived ? `${ROOT}archive/${archived}/` : ROOT;
+const remote = () => (archived ? `${ROOT}archive/${archived}/` : ROOT);
 
 export type DataSource = "live" | "bundled";
 
@@ -34,12 +45,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 async function fromEither<T>(file: string): Promise<{ data: T; source: DataSource }> {
-  if (archived) return { data: await fetchJson<T>(REMOTE + file), source: "live" };
+  if (archived) return { data: await fetchJson<T>(remote() + file), source: "live" };
   const order: DataSource[] = preferred() === "live" ? ["live", "bundled"] : ["bundled", "live"];
   let lastError: unknown;
   for (const source of order) {
     try {
-      return { data: await fetchJson<T>((source === "live" ? REMOTE : BUNDLED) + file), source };
+      return { data: await fetchJson<T>((source === "live" ? remote() : BUNDLED) + file), source };
     } catch (error) {
       lastError = error;
     }

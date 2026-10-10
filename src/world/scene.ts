@@ -921,10 +921,12 @@ export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks):
     disableContextMenu: true,
   });
   // The pane or an iframe can change size without a window resize event.
-  new ResizeObserver(() => {
+  const resized = new ResizeObserver(() => {
     const width = parent.clientWidth;
     const height = parent.clientHeight;
     if (width > 0 && height > 0 && (width !== game.scale.width || height !== game.scale.height)) game.scale.resize(width, height);
-  }).observe(parent);
+  });
+  resized.observe(parent);
+  game.events.once(Phaser.Core.Events.DESTROY, () => resized.disconnect());
   return scene;
 }
