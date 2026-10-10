@@ -4,6 +4,7 @@ import { loadCongressLine, loadSearch, loadSearchOf } from "../data/load";
 import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel, ordinal } from "../data/types";
+import { ERA } from "../world/era";
 import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
 import { add, el, niceDate, put } from "./dom";
@@ -243,6 +244,11 @@ export function createPanel(world: World, actions: PanelActions) {
         final ? "Each one is on the map, at the place where it ended." : "Each sheet of paper on the map is one of them, sitting where its latest action left it.",
       ),
       el("p", { class: "note" }, "Click a paper or a building. The House, the Senate and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom."),
+      ERA[world.congress]
+        ? el("details", { class: "explain" }, el("summary", {}, "Signs of the times"),
+            el("p", { class: "note" }, "A few small objects on the lawns place this Congress in its years. Point at one on the map to read it."),
+            el("ul", {}, ...ERA[world.congress].map((marker) => el("li", {}, marker.note))))
+        : null,
       el("h3", {}, final ? "Where those bills ended" : "Where those bills are"),
       el("ul", { class: "list" }, ...rows),
       el("p", { class: "note" }, final ? "Pick a stage to list its bills." : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),

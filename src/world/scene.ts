@@ -11,12 +11,14 @@ import {
   drawCrate,
   drawForest,
   drawGround,
+  type Landmark,
   drawMembers,
   drawPaper,
   drawRing,
   drawRobot,
 } from "./art";
 import type { Wing } from "./building";
+import { ERA } from "./era";
 import { InteriorScene } from "./interior";
 import { MAP_H, MAP_W, TILE, anchorOf, buildLayout, route, siteKeyFor, type Layout, type Site } from "./layout";
 
@@ -111,6 +113,7 @@ export class WorldScene extends Phaser.Scene {
   private timers: Phaser.Time.TimerEvent[] = [];
   private selected: Target | null = null;
   private filter: Filter = { party: "", policyArea: "", stage: "", dead: false };
+  private landmarks: Landmark[] = [];
   private lastZoom = -1;
   private pinch = 0;
   private replaying = false;
@@ -146,6 +149,7 @@ export class WorldScene extends Phaser.Scene {
     this.add.image(0, 0, "ground").setOrigin(0).setDepth(DEPTH.ground);
     this.makeBelts();
     this.makeSites();
+    this.makeLandmarks();
     this.outline = this.add.graphics().setDepth(DEPTH.ring);
     this.ring = this.add.image(0, 0, "ring").setDepth(DEPTH.ring).setVisible(false);
     this.tweens.add({ targets: this.ring, scale: 1.25, duration: 500, yoyo: true, repeat: -1 });
@@ -154,8 +158,32 @@ export class WorldScene extends Phaser.Scene {
     this.hooks.onReady();
   }
 
+  /** Captions for the signs of the times: shown while the pointer is over one, and for a few seconds after a tap. */
+  private makeLandmarks() {
+    if (!this.landmarks.length) return;
+    const caption = this.text(0, 0, "", 12).setOrigin(0.5, 1).setDepth(DEPTH.label + 1).setVisible(false);
+    caption.setWordWrapWidth(230);
+    let hide: Phaser.Time.TimerEvent | undefined;
+    for (const mark of this.landmarks) {
+      const zone = this.add.zone(mark.x + mark.size / 2, mark.y + mark.size / 2, mark.size, mark.size).setInteractive({ cursor: "help" });
+      const show = () => {
+        hide?.remove();
+        // The same size on screen at any zoom.
+        caption.setText(mark.note).setPosition(mark.x + mark.size / 2, mark.y - 2).setScale(1 / this.cameras.main.zoom).setVisible(true);
+      };
+      zone.on("pointerover", show);
+      zone.on("pointerout", () => caption.setVisible(false));
+      zone.on("pointerdown", () => {
+        show();
+        hide = this.time.delayedCall(5000, () => caption.setVisible(false));
+      });
+    }
+  }
+
   private makeTextures() {
-    this.textures.addCanvas("ground", drawGround(this.layout));
+    const { ground, landmarks } = drawGround(this.layout, ERA[this.world.congress], this.world.congress);
+    this.landmarks = landmarks;
+    this.textures.addCanvas("ground", ground);
     this.textures.addCanvas("forest", drawForest());
     const sheet = drawMembers(this.world.members);
     const texture = this.textures.addCanvas("members", sheet.canvas)!;

@@ -30,6 +30,17 @@ The picker under the title opens a finished Congress, back to the 113th
 ended, with the official Congressional Research Service summaries; `?congress=118`
 in the URL does the same, and a link to a bill opens the Congress it belongs to.
 
+The Bill Memorial stands for the bills that are finished without having
+succeeded. Bills that were vetoed or lost a floor vote are laid there, and its
+panel counts every dead bill by the way it died: in a finished Congress, where
+it stood on the last day; in the current one, a year without action, after
+which 96 in 100 bills of the last six Congresses never moved again.
+
+Search looks through every Congress, and the Stats tab takes any run of them,
+from one Congress to all of them. A few small objects on the lawns (a ballot
+box, a shutdown barricade, a server rack) place each Congress in its years;
+they are scenery with a caption, listed in `src/world/era.ts`.
+
 Live at <https://christophersoria.com/capitol-world/>.
 
 ## Data
@@ -41,7 +52,6 @@ public dataset
 - `world/world.json`: members, committees, the bills with an action in the last
   30 days and where each sits, and the moves of the last 7 days
 - `world/search.json.gz`: every bill of the Congress, for the search box
-
 - `world/congresses.json` and `world/archive/<congress>/`: the finished
   Congresses, built once by `build_congress_archive.py` from GovInfo's Bill
   Status bulk data and loaded only when one is picked
@@ -67,6 +77,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 
 - `src/data/` snapshot types and loading
 - `src/world/layout.ts` the map: sites, streets and routes
+- `src/world/era.ts` the signs of the times drawn on the lawns of each Congress
 - `src/world/art.ts` map artwork and figures, drawn at runtime from one palette (no image files)
 - `src/world/scene.ts` the map scene: camera, bills at their sites, the replay
 - `src/world/building.ts` floor plans (the two chambers, six committee-room templates), furniture, places to be, path finding

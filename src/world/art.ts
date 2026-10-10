@@ -451,7 +451,31 @@ export function drawForest(): HTMLCanvasElement {
   return element;
 }
 
-export function drawGround(layout: Layout): HTMLCanvasElement {
+/** A sign of the times on the lawn: where it is, in pixels, and its caption. */
+export interface Landmark {
+  x: number;
+  y: number;
+  size: number;
+  note: string;
+}
+
+// Lawns where the signs of the times go, one to each: by the White House, and down the mall.
+const ERA_LAWNS: Rect[] = [
+  { x: 70, y: 6, w: 6, h: 4 },
+  { x: 82, y: 29, w: 11, h: 6 },
+  { x: 82, y: 37, w: 11, h: 7 },
+  { x: 82, y: 76, w: 11, h: 10 },
+  { x: 82, y: 88, w: 11, h: 9 },
+];
+
+/** Something small to draw on a lawn, in a square of `LANDMARK_SIZE` pixels, with its caption. */
+export interface LawnMarker {
+  draw(ctx: CanvasRenderingContext2D, x: number, y: number): void;
+  note: string;
+}
+export const LANDMARK_SIZE = 32;
+
+export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0): { ground: HTMLCanvasElement; landmarks: Landmark[] } {
   const [element, ctx] = canvas(MAP_W * TILE, MAP_H * TILE);
   const random = rng(119);
   const blocked: boolean[][] = Array.from({ length: MAP_H }, () => new Array<boolean>(MAP_W).fill(false));
@@ -545,6 +569,22 @@ export function drawGround(layout: Layout): HTMLCanvasElement {
     else drawRoofed(ctx, entry);
   }
 
+  // Signs of the times, each somewhere on its own lawn; the place differs from Congress to Congress.
+  const landmarks: Landmark[] = [];
+  const spot = rng(seed * 7919 + 13);
+  markers.forEach((marker, index) => {
+    const lawn = ERA_LAWNS[index % ERA_LAWNS.length];
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const tx = lawn.x + Math.floor(spot() * (lawn.w - 1));
+      const ty = lawn.y + Math.floor(spot() * (lawn.h - 1));
+      if (blocked[ty][tx] || blocked[ty][tx + 1] || blocked[ty + 1][tx] || blocked[ty + 1][tx + 1]) continue;
+      marker.draw(ctx, tx * TILE, ty * TILE);
+      block({ x: tx, y: ty, w: 2, h: 2 });
+      landmarks.push({ x: tx * TILE, y: ty * TILE, size: LANDMARK_SIZE, note: marker.note });
+      break;
+    }
+  });
+
   // Trees on whatever grass is left, denser toward the edges.
   for (let ty = 2; ty < MAP_H - 1; ty++) {
     for (let tx = 1; tx < MAP_W - 1; tx++) {
@@ -559,7 +599,7 @@ export function drawGround(layout: Layout): HTMLCanvasElement {
       }
     }
   }
-  return element;
+  return { ground: element, landmarks };
 }
 
 // ── Legislators ──────────────────────────────────────────────────────────────
@@ -747,7 +787,7 @@ export function drawRing(): HTMLCanvasElement {
   return element;
 }
 
-const DIGITS = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];
+export const DIGITS = ["111101101101111", "010110010010111", "111001111100111", "111001111001111", "101101111001001", "111100111001111", "111100111101111", "111001010010010", "111101111101111", "111101111001111"];
 
 /** Count badges 1…99 as frames of one texture. */
 export function drawBadges(): { canvas: HTMLCanvasElement; frame: (n: number) => Rect } {
