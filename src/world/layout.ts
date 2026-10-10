@@ -2,7 +2,7 @@
 // a mall between them, and the White House row across the top. Bills travel
 // from the hoppers at the bottom toward the top.
 
-import type { Chamber, Committee, Member } from "../data/types";
+import type { Chamber, Committee } from "../data/types";
 
 export const TILE = 16;
 export const MAP_W = 176;
@@ -45,12 +45,6 @@ export interface Site {
   /** Street in front of the dock that robots drive along. */
   lane: number;
   capacity: number;
-}
-
-export interface Seat {
-  member: Member;
-  x: number; // pixels, feet position
-  y: number;
 }
 
 export interface Layout {
@@ -217,35 +211,4 @@ export function route(from: Site, to: Site): { x: number; y: number }[] {
   }
   points.push({ x: aveB, y: laneB }, { x: b.x, y: laneB }, b);
   return points.filter((point, index) => index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
-}
-
-/** Seats inside a chamber: two blocks either side of a centre aisle, Democrats on the viewer's left. */
-export function seatMembers(chamber: Rect, members: Member[]): Seat[] {
-  const order = (list: Member[]) =>
-    [...list].sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
-  const left = order(members.filter((m) => m.party !== "R"));
-  const right = order(members.filter((m) => m.party === "R"));
-  const inner = { x: (chamber.x + 2) * TILE, y: (chamber.y + 6) * TILE, w: (chamber.w - 4) * TILE, h: (chamber.h - 8) * TILE };
-  const aisle = 3 * TILE;
-  const blockW = (inner.w - aisle) / 2;
-  const biggest = Math.max(left.length, right.length, 1);
-  const rows = Math.max(3, Math.min(13, Math.ceil(Math.sqrt(biggest / 1.9))));
-  const cols = Math.ceil(biggest / rows);
-  const dx = Math.min(blockW / cols, 30);
-  const dy = Math.min(inner.h / rows, 30);
-  const usedW = dx * cols;
-  const seats: Seat[] = [];
-  const place = (list: Member[], blockX: number, towardAisle: 1 | -1) => {
-    list.forEach((member, index) => {
-      const row = Math.floor(index / cols);
-      const col = index % cols;
-      // Fill from the aisle outward so the blocks stay centred.
-      const offset = towardAisle === 1 ? usedW - (col + 0.5) * dx : (col + 0.5) * dx;
-      const bow = Math.pow((col + 0.5) / cols, 2) * 10; // slight amphitheatre curve
-      seats.push({ member, x: Math.round(blockX + offset), y: Math.round(inner.y + (row + 1) * dy - bow) });
-    });
-  };
-  place(left, inner.x + (blockW - usedW), 1);
-  place(right, inner.x + blockW + aisle, -1);
-  return seats;
 }

@@ -1,10 +1,17 @@
 # Capitol World
 
 A pixel-art map of where the active bills of the U.S. Congress are right now.
-Legislators sit in their chambers; each sheet of paper is a bill, stacked at the
-committee, calendar, floor or desk its latest action left it at. On load, the
-map replays the latest day of activity: sponsors walk new bills to the hopper,
-committee chairs carry reported bills to the calendar, and robots move the rest.
+Each sheet of paper is a bill, stacked at the committee, calendar, floor or desk
+its latest action left it at. On load, the map replays the latest day of
+activity: sponsors walk new bills to the hopper, committee chairs carry reported
+bills to the calendar, and robots move the rest.
+
+Click the House or the Senate to go inside. Every member has a seat in the
+chamber, and the building around it has offices, party cloakrooms, a library, a
+hearing room, a cafeteria, a rotunda, a press room and a gym. Members get up,
+walk somewhere, do something and come back. That bustle is ambient animation on
+an invented floor plan; only the bills, where they are and who carried them come
+from the data.
 
 Live at <https://christophersoria.com/capitol-world/>.
 
@@ -38,9 +45,12 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 ## Layout
 
 - `src/data/` snapshot types and loading
-- `src/world/layout.ts` the map: sites, streets, seats and routes
-- `src/world/art.ts` all artwork, drawn at runtime from one palette (no image files)
-- `src/world/scene.ts` the Phaser scene: camera, bills at their sites, the replay
+- `src/world/layout.ts` the map: sites, streets and routes
+- `src/world/art.ts` map artwork and figures, drawn at runtime from one palette (no image files)
+- `src/world/scene.ts` the map scene: camera, bills at their sites, the replay
+- `src/world/building.ts` a chamber building's floor plan, furniture, places to be, and path finding
+- `src/world/interior.ts` the inside scene: who is where and what they do next
+- `src/world/camera.ts` pan and zoom, shared by both scenes
 - `src/ui/panel.ts` the side panel: inspector, search, filters, about
 
 The figures are generated at random from each member's ID and are not likenesses.

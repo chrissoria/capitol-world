@@ -125,7 +125,7 @@ export function createPanel(world: World, actions: PanelActions) {
         `${world.counts.world.toLocaleString()} bills had an action in the 30 days up to ${niceDate(world.data_through)}. `,
         "Each sheet of paper on the map is one of them, sitting where its latest action left it.",
       ),
-      el("p", { class: "note" }, "Click a legislator, a paper or a building. Drag to move around; scroll or pinch to zoom."),
+      el("p", { class: "note" }, "Click a paper or a building. Click the House or the Senate to go inside and meet the members. Drag to move around; scroll or pinch to zoom."),
       el("h3", {}, "Where those bills are"),
       el("ul", { class: "list" }, ...rows),
       el("p", { class: "note" }, `The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
@@ -165,7 +165,7 @@ export function createPanel(world: World, actions: PanelActions) {
       theirs.length ? el("h3", {}, "Active bills") : null,
       el("ul", { class: "list" }, ...theirs.map((bill) => billRow(bill))),
       theirs.length ? el("p", { class: "note" }, "The buildings holding these bills are outlined on the map.") : null,
-      el("p", { class: "note" }, "The character is generated at random and is not a likeness."),
+      el("p", { class: "note" }, "The character is generated at random and is not a likeness. What it does inside the building is animation, not a record of the member’s day."),
     );
   }
 
@@ -313,6 +313,7 @@ export function createPanel(world: World, actions: PanelActions) {
     el("p", {}, "Teal roofs are the House side and purple roofs the Senate side. Paper with a teal band started in the House; a purple band, the Senate. A number over a legislator's head is how many active bills they sponsor."),
     el("p", {}, "Party is shown by the pin on each figure and in this panel: ", pin("D"), "Democrat, ", pin("R"), "Republican, ", pin("I"), "Independent."),
     el("p", {}, "The figures are generated at random from each member's ID. They are not likenesses."),
+    el("p", {}, "Click the House or the Senate to step inside. The floor plan is invented, and what the figures do there (eating, reading, talking, presiding) is ambient animation, not a record of anyone’s day. Only the bills, their locations and who carried them come from the data."),
     el("p", {}, "Bill summaries are written by an AI model and may describe an earlier version of a bill. Where a bill sits says nothing about its merit."),
     el("p", { class: "note" }, "Made by Chris Soria. Not affiliated with Congress."),
   );

@@ -62,7 +62,7 @@ export function rng(seed: number): () => number {
   };
 }
 
-function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+export function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
   const element = document.createElement("canvas");
   element.width = w;
   element.height = h;
@@ -71,12 +71,12 @@ function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContex
   return [element, ctx];
 }
 
-function box(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
+export function box(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, color: string) {
   ctx.fillStyle = color;
   ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
 }
 
-function framed(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string) {
+export function framed(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, fill: string) {
   box(ctx, x, y, w, h, PALETTE.ink);
   box(ctx, x + 1, y + 1, w - 2, h - 2, fill);
 }
@@ -178,31 +178,108 @@ function drawSmall(ctx: CanvasRenderingContext2D, entry: Site) {
   box(ctx, x + 12, y + 27, w - 24, 2, PALETTE.ink);
 }
 
+/** Rows of a filled circle, so a dome stays crisp instead of anti-aliased. */
+function disc(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string, top = -r, bottom = r) {
+  for (let dy = Math.round(top); dy < Math.round(bottom); dy++) {
+    const half = Math.round(Math.sqrt(Math.max(0, r * r - (dy + 0.5) * (dy + 0.5))));
+    if (half > 0) box(ctx, cx - half, cy + dy, half * 2, 1, color);
+  }
+}
+
+/** The House and Senate: a long roofed hall with a portico, steps and a dome. */
 function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   const { x, y, w, h } = scale(entry.rect);
-  const senate = entry.wing === "Senate";
-  const accent = senate ? PALETTE.senate : PALETTE.house;
-  const accentDark = senate ? PALETTE.senateDark : PALETTE.houseDark;
-  const wall = TILE;
-  framed(ctx, x, y, w, h, PALETTE.wall);
-  box(ctx, x + 1, y + 1, w - 2, 5, accent);
-  box(ctx, x + 1, y + 6, w - 2, 1, accentDark);
-  // Carpeted floor.
-  framed(ctx, x + wall - 1, y + wall + 7, w - wall * 2 + 2, h - wall * 2 - 5, senate ? PALETTE.senateCarpet : PALETTE.houseCarpet);
-  const floorTop = y + wall + 8;
-  const floorH = h - wall * 2 - 7;
-  for (let cy = floorTop + 14; cy < floorTop + floorH; cy += 16) box(ctx, x + wall, cy, w - wall * 2, 1, PALETTE.wallShade);
-  // Centre aisle and rostrum.
-  box(ctx, x + w / 2 - 20, floorTop, 40, floorH, PALETTE.path);
-  framed(ctx, x + w / 2 - 44, floorTop + 6, 88, 20, PALETTE.wood);
-  framed(ctx, x + w / 2 - 22, floorTop + 2, 44, 12, PALETTE.woodDark);
-  box(ctx, x + w / 2 - 2, floorTop - 12, 1, 14, PALETTE.ink);
-  box(ctx, x + w / 2 - 1, floorTop - 12, 9, 6, accent);
-  // Columns along the walls and a doorway at the bottom.
-  for (let cx = x + 10; cx < x + w - 10; cx += 28) framed(ctx, cx, y + h - wall, 6, wall, PALETTE.white);
-  box(ctx, x + w / 2 - 14, y + h - wall, 28, wall, PALETTE.path);
-  box(ctx, x + w / 2 - 15, y + h - wall, 1, wall, PALETTE.ink);
-  box(ctx, x + w / 2 + 14, y + h - wall, 1, wall, PALETTE.ink);
+  const [roof, roofDark] = roofColors(entry);
+  const roofH = Math.round(h * 0.6);
+  const mid = x + Math.round(w / 2);
+  const wallTop = y + roofH;
+  const wallH = h - roofH;
+
+  // Walls with two storeys of windows.
+  framed(ctx, x, wallTop - 2, w, wallH + 2, PALETTE.wall);
+  box(ctx, x + 1, wallTop + Math.round(wallH / 2) - 2, w - 2, 3, PALETTE.wallShade);
+  box(ctx, x + 1, y + h - 9, w - 2, 8, PALETTE.wallShade);
+  const porticoW = 248;
+  for (let wx = x + 14; wx + 14 <= x + w - 10; wx += 30) {
+    if (wx + 14 > mid - porticoW / 2 - 6 && wx < mid + porticoW / 2 + 6) continue;
+    for (const wy of [wallTop + 16, wallTop + Math.round(wallH / 2) + 14]) {
+      framed(ctx, wx, wy, 14, 22, PALETTE.window);
+      box(ctx, wx + 6, wy + 1, 2, 20, PALETTE.ink);
+      box(ctx, wx + 1, wy + 10, 12, 1, PALETTE.ink);
+      box(ctx, wx - 2, wy + 22, 18, 3, PALETTE.stoneEdge);
+    }
+  }
+
+  // Roof: shingle rows, hipped ends and a ridge.
+  framed(ctx, x - 4, y, w + 8, roofH, roof);
+  for (let row = 6; row < roofH - 3; row += 6) box(ctx, x - 3, y + row, w + 6, 1, roofDark);
+  for (let i = 0; i < roofH - 2; i += 2) {
+    const reach = Math.round((1 - Math.abs(i - roofH / 2) / (roofH / 2)) * 46);
+    box(ctx, x - 3, y + 1 + i, reach, 2, roofDark);
+    box(ctx, x + w + 3 - reach, y + 1 + i, reach, 2, roofDark);
+  }
+  box(ctx, x + 46, y + Math.round(roofH / 2) - 2, w - 92, 4, roofDark);
+  box(ctx, x + 46, y + Math.round(roofH / 2) - 1, w - 92, 1, PALETTE.wall);
+  box(ctx, x - 3, y + roofH - 4, w + 6, 3, roofDark);
+  for (const cx of [x + 120, x + w - 136]) {
+    framed(ctx, cx, y + 22, 16, 20, PALETTE.wallShade);
+    framed(ctx, cx - 2, y + 18, 20, 6, PALETTE.stoneEdge);
+  }
+
+  // Dome on a drum, with a lantern and a flag.
+  const domeY = y + Math.round(roofH * 0.6);
+  const r = Math.min(74, Math.round(roofH * 0.34));
+  framed(ctx, mid - r - 14, domeY + 6, r * 2 + 28, 26, PALETTE.stone);
+  framed(ctx, mid - r - 6, domeY - 12, r * 2 + 12, 20, PALETTE.white);
+  for (let cx = mid - r; cx < mid + r; cx += 12) framed(ctx, cx, domeY - 9, 6, 14, PALETTE.window);
+  disc(ctx, mid, domeY - 12, r + 2, PALETTE.ink, -(r + 2), 0);
+  disc(ctx, mid, domeY - 12, r, PALETTE.white, -r, 0);
+  for (const rib of [-0.62, -0.25, 0.25, 0.62]) {
+    for (let dy = -r + 3; dy < 0; dy++) {
+      const half = Math.sqrt(r * r - dy * dy);
+      box(ctx, mid + Math.round(half * rib), domeY - 12 + dy, 1, 1, PALETTE.stoneEdge);
+    }
+  }
+  box(ctx, mid - r + 4, domeY - 20, r * 2 - 8, 3, roof);
+  framed(ctx, mid - 9, domeY - 12 - r - 14, 18, 18, PALETTE.white);
+  framed(ctx, mid - 5, domeY - 12 - r - 10, 10, 9, PALETTE.window);
+  disc(ctx, mid, domeY - 12 - r - 14, 8, PALETTE.ink, -8, 0);
+  disc(ctx, mid, domeY - 12 - r - 14, 6, PALETTE.gold, -6, 0);
+  const pole = domeY - 12 - r - 46;
+  box(ctx, mid, pole, 1, 26, PALETTE.ink);
+  box(ctx, mid + 1, pole, 16, 10, PALETTE.partyR);
+  for (let stripe = 1; stripe < 10; stripe += 4) box(ctx, mid + 1, pole + stripe, 16, 2, PALETTE.white);
+  box(ctx, mid + 1, pole, 7, 6, PALETTE.partyD);
+
+  // Portico: pediment, columns, door and steps.
+  const px = mid - porticoW / 2;
+  framed(ctx, px - 6, wallTop - 8, porticoW + 12, 10, PALETTE.white);
+  for (let i = 0; i < 26; i++) {
+    const half = Math.round((porticoW / 2 + 4) * (1 - i / 26));
+    box(ctx, mid - half, wallTop - 9 - i, half * 2, 1, i === 25 ? PALETTE.ink : PALETTE.white);
+    box(ctx, mid - half - 1, wallTop - 9 - i, 1, 1, PALETTE.ink);
+    box(ctx, mid + half, wallTop - 9 - i, 1, 1, PALETTE.ink);
+  }
+  box(ctx, mid - 26, wallTop - 22, 52, 8, roof);
+  box(ctx, mid - 14, wallTop - 28, 28, 6, roof);
+  framed(ctx, px, wallTop + 2, porticoW, wallH - 16, PALETTE.wallShade);
+  const doorW = 34;
+  const doorH = Math.min(58, wallH - 30);
+  framed(ctx, mid - doorW / 2, y + h - 14 - doorH, doorW, doorH, PALETTE.door);
+  box(ctx, mid - 1, y + h - 13 - doorH, 2, doorH - 2, PALETTE.ink);
+  box(ctx, mid - 6, y + h - 14 - Math.round(doorH / 2), 2, 3, PALETTE.yellow);
+  box(ctx, mid + 4, y + h - 14 - Math.round(doorH / 2), 2, 3, PALETTE.yellow);
+  framed(ctx, mid - doorW / 2 - 3, y + h - 20 - doorH, doorW + 6, 7, PALETTE.gold);
+  for (let cx = px + 6; cx <= px + porticoW - 16; cx += 30) {
+    if (cx + 10 > mid - doorW / 2 - 2 && cx < mid + doorW / 2 + 2) continue;
+    framed(ctx, cx, wallTop + 2, 10, wallH - 16, PALETTE.white);
+    box(ctx, cx + 6, wallTop + 3, 2, wallH - 18, PALETTE.stone);
+    framed(ctx, cx - 2, wallTop + 2, 14, 5, PALETTE.white);
+    framed(ctx, cx - 2, y + h - 19, 14, 5, PALETTE.white);
+  }
+  for (let step = 0; step < 3; step++) {
+    framed(ctx, px - 10 - step * 6, y + h - 14 + step * 5, porticoW + 20 + step * 12, 6, step % 2 ? PALETTE.stone : PALETTE.white);
+  }
 }
 
 function drawConference(ctx: CanvasRenderingContext2D, entry: Site) {
@@ -351,12 +428,20 @@ export function partyColor(party: string): string {
   return party === "R" ? PALETTE.partyR : party === "D" ? PALETTE.partyD : PALETTE.partyI;
 }
 
-/** A 16×24 figure built from seeded parts. It is not a likeness of the member. */
-function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, member: Member) {
-  const random = rng(hash(member.id));
+export interface Look {
+  seed: string;
+  /** "R", "D", anything else for the independent pin, or null for no pin (staff). */
+  party: string | null;
+  coat?: string;
+  cap?: string;
+}
+
+/** A 16×24 figure built from seeded parts, seen from the front or the back. It is not a likeness. */
+function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, look: Look, back = false) {
+  const random = rng(hash(look.seed));
   const skin = SKIN[Math.floor(random() * SKIN.length)];
   const hair = HAIR[Math.floor(random() * HAIR.length)];
-  const suit = SUIT[Math.floor(random() * SUIT.length)];
+  const suit = look.coat ?? SUIT[Math.floor(random() * SUIT.length)];
   const style = Math.floor(random() * 5);
   const ink = PALETTE.ink;
 
@@ -368,63 +453,95 @@ function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, membe
   // Head.
   box(ctx, ox + 4, oy + 3, 8, 7, skin);
   box(ctx, ox + 5, oy + 2, 6, 1, skin);
-  box(ctx, ox + 6, oy + 6, 1, 2, ink);
-  box(ctx, ox + 9, oy + 6, 1, 2, ink);
-  // Hair.
-  if (style !== 4) {
-    box(ctx, ox + 4, oy + 2, 8, 2, hair);
-    box(ctx, ox + 5, oy + 1 + 1, 6, 1, hair);
-  }
-  if (style === 0) box(ctx, ox + 4, oy + 4, 1, 2, hair);
-  if (style === 1) {
-    box(ctx, ox + 4, oy + 4, 1, 5, hair);
-    box(ctx, ox + 11, oy + 4, 1, 5, hair);
-  }
-  if (style === 2) box(ctx, ox + 4, oy + 4, 3, 1, hair);
-  if (style === 3) {
-    box(ctx, ox + 3, oy + 3, 1, 7, hair);
-    box(ctx, ox + 12, oy + 3, 1, 7, hair);
-    box(ctx, ox + 4, oy + 4, 1, 6, hair);
-    box(ctx, ox + 11, oy + 4, 1, 6, hair);
-  }
-  if (style === 4) {
-    box(ctx, ox + 4, oy + 3, 1, 3, hair);
-    box(ctx, ox + 11, oy + 3, 1, 3, hair);
-  }
-  // Suit, shirt, and a party pin whose shape differs by party.
-  box(ctx, ox + 3, oy + 11, 10, 8, suit);
-  box(ctx, ox + 7, oy + 11, 2, 4, PALETTE.white);
-  const pin = partyColor(member.party);
-  if (member.party === "R") box(ctx, ox + 4, oy + 13, 3, 3, pin);
-  else if (member.party === "D") {
-    box(ctx, ox + 5, oy + 13, 1, 3, pin);
-    box(ctx, ox + 4, oy + 14, 3, 1, pin);
+  if (back) {
+    // The back of the head is mostly hair.
+    if (style !== 4) {
+      box(ctx, ox + 4, oy + 2, 8, 6, hair);
+      box(ctx, ox + 5, oy + 2, 6, 1, hair);
+    } else box(ctx, ox + 4, oy + 6, 8, 2, hair);
+    if (style === 1 || style === 3) box(ctx, ox + 4, oy + 8, 8, 2, hair);
+    if (style === 3) {
+      box(ctx, ox + 3, oy + 3, 1, 7, hair);
+      box(ctx, ox + 12, oy + 3, 1, 7, hair);
+      box(ctx, ox + 4, oy + 10, 8, 2, hair);
+    }
   } else {
-    box(ctx, ox + 5, oy + 13, 1, 1, pin);
-    box(ctx, ox + 4, oy + 14, 3, 1, pin);
-    box(ctx, ox + 5, oy + 15, 1, 1, pin);
+    box(ctx, ox + 6, oy + 6, 1, 2, ink);
+    box(ctx, ox + 9, oy + 6, 1, 2, ink);
+    if (style !== 4) {
+      box(ctx, ox + 4, oy + 2, 8, 2, hair);
+      box(ctx, ox + 5, oy + 1 + 1, 6, 1, hair);
+    }
+    if (style === 0) box(ctx, ox + 4, oy + 4, 1, 2, hair);
+    if (style === 1) {
+      box(ctx, ox + 4, oy + 4, 1, 5, hair);
+      box(ctx, ox + 11, oy + 4, 1, 5, hair);
+    }
+    if (style === 2) box(ctx, ox + 4, oy + 4, 3, 1, hair);
+    if (style === 3) {
+      box(ctx, ox + 3, oy + 3, 1, 7, hair);
+      box(ctx, ox + 12, oy + 3, 1, 7, hair);
+      box(ctx, ox + 4, oy + 4, 1, 6, hair);
+      box(ctx, ox + 11, oy + 4, 1, 6, hair);
+    }
+    if (style === 4) {
+      box(ctx, ox + 4, oy + 3, 1, 3, hair);
+      box(ctx, ox + 11, oy + 3, 1, 3, hair);
+    }
+  }
+  if (look.cap) {
+    box(ctx, ox + 4, oy + 1, 8, 3, look.cap);
+    box(ctx, ox + 4, oy + 3, 8, 1, ink);
+  }
+  // Suit; from the front, a shirt and a party pin whose shape differs by party.
+  box(ctx, ox + 3, oy + 11, 10, 8, suit);
+  if (back) {
+    if (style !== 3) box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
+    box(ctx, ox + 8, oy + 13, 1, 6, ink);
+  } else {
+    box(ctx, ox + 7, oy + 11, 2, 4, look.coat ? PALETTE.stoneEdge : PALETTE.white);
+    if (look.party !== null) {
+      const pin = partyColor(look.party);
+      if (look.party === "R") box(ctx, ox + 4, oy + 13, 3, 3, pin);
+      else if (look.party === "D") {
+        box(ctx, ox + 5, oy + 13, 1, 3, pin);
+        box(ctx, ox + 4, oy + 14, 3, 1, pin);
+      } else {
+        box(ctx, ox + 5, oy + 13, 1, 1, pin);
+        box(ctx, ox + 4, oy + 14, 3, 1, pin);
+        box(ctx, ox + 5, oy + 15, 1, 1, pin);
+      }
+    }
   }
   box(ctx, ox + 3, oy + 17, 2, 2, skin);
   box(ctx, ox + 11, oy + 17, 2, 2, skin);
   // Legs and shoes.
-  box(ctx, ox + 5, oy + 19, 2, 4, suit);
-  box(ctx, ox + 9, oy + 19, 2, 4, suit);
+  const legs = look.coat ? "#3d3f4a" : suit;
+  box(ctx, ox + 5, oy + 19, 2, 4, legs);
+  box(ctx, ox + 9, oy + 19, 2, 4, legs);
   box(ctx, ox + 5, oy + 22, 2, 1, ink);
   box(ctx, ox + 9, oy + 22, 2, 1, ink);
 }
 
-export function drawMembers(members: Member[]): { canvas: HTMLCanvasElement; frames: Map<string, Rect> } {
+/** One sheet of figures. Each gets two frames: its key (front) and `${key}:b` (back). */
+export function drawFigures(looks: { key: string; look: Look }[]): { canvas: HTMLCanvasElement; frames: Map<string, Rect> } {
   const cols = 32;
-  const rows = Math.max(1, Math.ceil(members.length / cols));
-  const [element, ctx] = canvas(cols * SPRITE_W, rows * SPRITE_H);
+  const rows = Math.max(1, Math.ceil(looks.length / cols));
+  const [element, ctx] = canvas(cols * SPRITE_W, rows * SPRITE_H * 2);
   const frames = new Map<string, Rect>();
-  members.forEach((member, index) => {
+  looks.forEach(({ key, look }, index) => {
     const x = (index % cols) * SPRITE_W;
-    const y = Math.floor(index / cols) * SPRITE_H;
-    drawFigure(ctx, x, y, member);
-    frames.set(member.id, { x, y, w: SPRITE_W, h: SPRITE_H });
+    const y = Math.floor(index / cols) * SPRITE_H * 2;
+    drawFigure(ctx, x, y, look);
+    drawFigure(ctx, x, y + SPRITE_H, look, true);
+    frames.set(key, { x, y, w: SPRITE_W, h: SPRITE_H });
+    frames.set(`${key}:b`, { x, y: y + SPRITE_H, w: SPRITE_W, h: SPRITE_H });
   });
   return { canvas: element, frames };
+}
+
+export function drawMembers(members: Member[]): { canvas: HTMLCanvasElement; frames: Map<string, Rect> } {
+  return drawFigures(members.map((member) => ({ key: member.id, look: { seed: member.id, party: member.party } })));
 }
 
 // ── Small props ──────────────────────────────────────────────────────────────

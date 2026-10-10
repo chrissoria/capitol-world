@@ -21,10 +21,12 @@ async function main() {
   }
   const { world, source } = loaded;
   const through = new Date(`${world.data_through}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-  $("stamp").textContent = `Data through ${through}${source === "bundled" ? " · bundled sample" : ""}`;
+  const stamp = `Data through ${through}${source === "bundled" ? " · bundled sample" : ""}`;
+  $("stamp").textContent = stamp;
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const replayButton = $<HTMLButtonElement>("replay");
+  const backButton = $<HTMLButtonElement>("back");
   const clock = $("clock");
   let current: Target | null = null;
   let panel: ReturnType<typeof createPanel> | undefined;
@@ -45,6 +47,12 @@ async function main() {
       }
       panel?.refresh(current);
     },
+    onPlace(inside) {
+      backButton.hidden = !inside;
+      replayButton.hidden = Boolean(inside) || !scene.hasEvents;
+      $("fit").textContent = inside ? "Whole building" : "Whole map";
+      $("stamp").textContent = inside ? `Inside the ${inside} · the comings and goings are animation` : stamp;
+    },
     onReady() {
       loading.remove();
       panel = createPanel(world, {
@@ -63,6 +71,10 @@ async function main() {
 
   if (import.meta.env.DEV) (window as unknown as { scene: WorldScene }).scene = scene;
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
+  backButton.addEventListener("click", () => scene.leave());
+  addEventListener("keydown", (event) => {
+    if (event.key === "Escape") scene.leave();
+  });
   $("zoom-in").addEventListener("click", () => scene.zoomBy(1.4));
   $("zoom-out").addEventListener("click", () => scene.zoomBy(1 / 1.4));
   $("fit").addEventListener("click", () => scene.fitWorld());

@@ -13,7 +13,9 @@ import {
   drawRing,
   drawRobot,
 } from "./art";
-import { MAP_H, MAP_W, TILE, anchorOf, buildLayout, route, seatMembers, siteKeyFor, type Layout, type Site } from "./layout";
+import type { Wing } from "./building";
+import { InteriorScene } from "./interior";
+import { MAP_H, MAP_W, TILE, anchorOf, buildLayout, route, siteKeyFor, type Layout, type Site } from "./layout";
 
 export type Target =
   | { type: "bill"; id: string }
@@ -23,6 +25,8 @@ export type Target =
 export interface SceneHooks {
   onSelect(target: Target | null): void;
   onClock(label: string | null, progress: number): void;
+  /** The view moved inside a chamber building, or back out to the map (null). */
+  onPlace(inside: Wing | null): void;
   onReady(): void;
 }
 
@@ -78,20 +82,19 @@ export class WorldScene extends Phaser.Scene {
   private atSite = new Map<string, string[]>();
   private docks = new Map<string, DockView>();
   private siteViews = new Map<string, SiteView>();
+  /** Legislators out on the map carrying a bill. Everyone else is inside their chamber. */
   private memberSprites = new Map<string, Phaser.GameObjects.Image>();
-  private badges = new Map<string, Phaser.GameObjects.Image>();
-  private nameLabels: Phaser.GameObjects.Text[] = [];
+  private hints: Phaser.GameObjects.Text[] = [];
+  private inside: Wing | null = null;
   private belts: { sprite: Phaser.GameObjects.TileSprite; direction: number }[] = [];
   private ring!: Phaser.GameObjects.Image;
   private outline!: Phaser.GameObjects.Graphics;
   private movers = new Set<Phaser.GameObjects.Container>();
   private walkers = new Map<string, Walker>();
-  private homes = new Map<string, Point>();
   private timers: Phaser.Time.TimerEvent[] = [];
   private selected: Target | null = null;
   private filter: Filter = { party: "", policyArea: "", stage: "" };
   private lastZoom = -1;
-  private lastLabelPass = 0;
   private pinch = 0;
   private replaying = false;
 
@@ -118,7 +121,6 @@ export class WorldScene extends Phaser.Scene {
     this.add.image(0, 0, "ground").setOrigin(0).setDepth(DEPTH.ground);
     this.makeBelts();
     this.makeSites();
-    this.makeMembers();
     this.outline = this.add.graphics().setDepth(DEPTH.ring);
     this.ring = this.add.image(0, 0, "ring").setDepth(DEPTH.ring).setVisible(false);
     this.tweens.add({ targets: this.ring, scale: 1.25, duration: 500, yoyo: true, repeat: -1 });
@@ -198,36 +200,9 @@ export class WorldScene extends Phaser.Scene {
     for (const chamber of ["House", "Senate"] as const) {
       const rect = this.layout.chambers[chamber];
       const total = this.world.members.filter((m) => m.chamber === chamber).length;
-      this.text((rect.x + rect.w / 2) * TILE, (rect.y - 1.2) * TILE, `${chamber.toUpperCase()} · ${total} members`, 14).setOrigin(0.5, 1);
-    }
-  }
-
-  private makeMembers() {
-    for (const chamber of ["House", "Senate"] as const) {
-      const seats = seatMembers(
-        this.layout.chambers[chamber],
-        this.world.members.filter((m) => m.chamber === chamber),
+      this.hints.push(
+        this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${chamber.toUpperCase()} · ${total} members\n▸ click to go inside`, 12).setOrigin(0.5, 1),
       );
-      for (const seat of seats) {
-        const sprite = this.add
-          .image(seat.x, seat.y, "members", seat.member.id)
-          .setOrigin(0.5, 1)
-          .setDepth(DEPTH.member + seat.y / 10000)
-          .setInteractive({ cursor: "pointer" });
-        sprite.setData("target", { type: "member", id: seat.member.id } satisfies Target);
-        this.memberSprites.set(seat.member.id, sprite);
-        this.homes.set(seat.member.id, { x: seat.x, y: seat.y });
-        if (seat.member.n_world > 0) {
-          const badge = this.add
-            .image(seat.x, seat.y - SPRITE_H - 1, "badges", String(Math.min(seat.member.n_world, 99)))
-            .setOrigin(0.5, 1)
-            .setDepth(DEPTH.member + 1);
-          this.badges.set(seat.member.id, badge);
-        }
-      }
-    }
-    for (let i = 0; i < 70; i++) {
-      this.nameLabels.push(this.text(0, 0, "", 7).setOrigin(0.5, 0).setVisible(false));
     }
   }
 
@@ -289,11 +264,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   zoomBy(factor: number) {
+    if (this.inside) return this.interior.zoomBy(factor);
     const camera = this.cameras.main;
     this.zoomAt(camera.width / 2, camera.height / 2, camera.zoom * factor);
   }
 
   fitWorld(duration = 500) {
+    if (this.inside) return this.interior.fit(duration);
     const camera = this.cameras.main;
     const zoom = Phaser.Math.Clamp(Math.min(camera.width / (MAP_W * TILE), camera.height / (MAP_H * TILE)), MIN_ZOOM, MAX_ZOOM);
     this.flyTo((MAP_W * TILE) / 2, (MAP_H * TILE) / 2, zoom, duration);
@@ -411,9 +388,21 @@ export class WorldScene extends Phaser.Scene {
 
   select(target: Target | null, fly = true) {
     this.selected = target;
+    // Go to wherever the thing is: legislators are inside their chamber unless they are out carrying a bill.
+    if (target?.type === "member") {
+      const chamber = this.members.get(target.id)?.chamber;
+      if (this.memberSprites.has(target.id)) this.leave();
+      else if (chamber === "House" || chamber === "Senate") this.enter(chamber);
+    } else if (target?.type === "site" && target.id.startsWith("floor:")) this.enter(target.id.endsWith("Senate") ? "Senate" : "House");
+    else if (target) this.leave();
     this.drawSelection();
+    this.interior.setSelected(target?.type === "member" ? target.id : null);
     this.hooks.onSelect(target);
     if (!target || !fly) return;
+    if (this.inside) {
+      if (target.type === "member") this.interior.focus(target.id);
+      return;
+    }
     const zoomIn = Math.max(this.cameras.main.zoom, 2);
     if (target.type === "member") {
       const sprite = this.memberSprites.get(target.id);
@@ -423,8 +412,39 @@ export class WorldScene extends Phaser.Scene {
       if (site) this.flyTo(anchorOf(site).x, anchorOf(site).y - 30, zoomIn);
     } else {
       const site = this.layout.sites.get(target.id);
-      if (site) this.flyTo((site.rect.x + site.rect.w / 2) * TILE, (site.rect.y + site.rect.h / 2) * TILE, site.style === "chamber" ? 1.2 : zoomIn);
+      if (site) this.flyTo((site.rect.x + site.rect.w / 2) * TILE, (site.rect.y + site.rect.h / 2) * TILE, zoomIn);
     }
+  }
+
+  // ── Going inside the chambers ──────────────────────────────────────────────
+
+  private get interior(): InteriorScene {
+    return this.scene.get("interior") as InteriorScene;
+  }
+
+  get place(): Wing | null {
+    return this.inside;
+  }
+
+  enter(wing: Wing) {
+    if (this.inside === wing) return;
+    if (this.replaying) this.skipReplay();
+    if (this.inside) this.scene.stop("interior");
+    this.inside = wing;
+    // The scene changes over on the next frame; until then it must queue, not act on, what it is told.
+    this.interior.ready = false;
+    this.scene.launch("interior", { wing });
+    this.scene.sleep();
+    this.hooks.onPlace(wing);
+  }
+
+  leave() {
+    if (!this.inside) return;
+    this.inside = null;
+    this.interior.ready = false;
+    this.scene.stop("interior");
+    this.scene.wake();
+    this.hooks.onPlace(null);
   }
 
   private drawSelection() {
@@ -459,12 +479,8 @@ export class WorldScene extends Phaser.Scene {
 
   setFilter(filter: Filter) {
     this.filter = filter;
-    for (const [id, sprite] of this.memberSprites) {
-      const member = this.members.get(id)!;
-      const dim = this.filtering() && !this.matchesMember(member);
-      sprite.setAlpha(dim ? 0.25 : 1);
-      this.badges.get(id)?.setAlpha(dim ? 0.25 : 1);
-    }
+    for (const [id, sprite] of this.memberSprites) sprite.setAlpha(this.matchesMember(this.members.get(id)!) ? 1 : 0.25);
+    this.interior.setFilter(filter.party);
     for (const key of this.layout.sites.keys()) this.placeDock(key);
     this.drawSelection();
   }
@@ -476,8 +492,6 @@ export class WorldScene extends Phaser.Scene {
     if (!force && Math.abs(zoom - this.lastZoom) < 0.001) return;
     this.lastZoom = zoom;
     const showPapers = zoom >= 0.7;
-    const showMembers = true;
-    const showBadges = zoom >= 1.3;
     const labelScale = Phaser.Math.Clamp(1 / zoom, 0.55, 2.6);
 
     for (const view of this.docks.values()) {
@@ -485,8 +499,7 @@ export class WorldScene extends Phaser.Scene {
       view.crate?.setVisible(showPapers);
       view.more?.setVisible(zoom >= 1.1);
     }
-    for (const sprite of this.memberSprites.values()) sprite.setVisible(showMembers);
-    for (const [id, badge] of this.badges) badge.setVisible(showBadges && !this.walkers.has(id));
+    for (const hint of this.hints) hint.setScale(Phaser.Math.Clamp(1 / zoom, 0.7, 3));
     for (const view of this.siteViews.values()) {
       const isChamber = view.site.style === "chamber";
       if (view.major) view.label.setVisible(!isChamber).setScale(Math.min(labelScale, 2.4));
@@ -495,34 +508,10 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  private placeNameLabels() {
-    const camera = this.cameras.main;
-    this.nameLabels.forEach((label) => label.setVisible(false));
-    if (camera.zoom < 2.2) return;
-    const view = camera.worldView;
-    let used = 0;
-    for (const [id, sprite] of this.memberSprites) {
-      if (used >= this.nameLabels.length) break;
-      if (!view.contains(sprite.x, sprite.y)) continue;
-      const member = this.members.get(id)!;
-      const last = member.name.split(" ").slice(-1)[0];
-      this.nameLabels[used++]
-        .setText(`${last}\n${member.state}`)
-        .setPosition(sprite.x, sprite.y)
-        .setScale(Phaser.Math.Clamp(2.4 / camera.zoom, 0.5, 1))
-        .setAlpha(sprite.alpha)
-        .setVisible(true);
-    }
-  }
-
-  update(time: number, delta: number) {
+  update(_time: number, delta: number) {
     for (const belt of this.belts) belt.sprite.tilePositionX -= (delta / 1000) * 40;
     this.applyLod();
     this.followWalkers();
-    if (time - this.lastLabelPass > 160) {
-      this.lastLabelPass = time;
-      this.placeNameLabels();
-    }
   }
 
   // ── Replaying the latest day ───────────────────────────────────────────────
@@ -575,7 +564,7 @@ export class WorldScene extends Phaser.Scene {
     for (const event of events) {
       const from = this.siteFor(event.from, event.bill);
       const to = this.siteFor(event.to, event.bill)!;
-      const actor = event.actor && this.memberSprites.has(event.actor) ? event.actor : null;
+      const actor = event.actor && this.homeChamber(event.actor) ? event.actor : null;
       if (actor) {
         const key = `${actor}|${from?.key ?? ""}|${to.key}`;
         const existing = shared.get(key);
@@ -592,6 +581,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   replay() {
+    this.leave();
     this.stopReplay();
     const events = this.lastDayEvents();
     if (!events.length) return;
@@ -638,16 +628,18 @@ export class WorldScene extends Phaser.Scene {
     return length;
   }
 
-  /** From a legislator's seat, down the aisle, out of the chamber door and along the streets to a site. */
+  private homeChamber(memberId: string): Wing | null {
+    const chamber = this.members.get(memberId)?.chamber;
+    return chamber === "House" || chamber === "Senate" ? chamber : null;
+  }
+
+  /** Out of the legislator's chamber door and along the streets to a site. */
   private pathFromSeat(memberId: string, site: Site): Point[] {
-    const home = this.homes.get(memberId)!;
-    const chamber = this.members.get(memberId)!.chamber === "Senate" ? "Senate" : "House";
+    const chamber = this.homeChamber(memberId) ?? "House";
     const rect = this.layout.chambers[chamber];
-    const aisle = (rect.x + rect.w / 2) * TILE;
-    const door = (rect.y + rect.h) * TILE - 6;
+    const door = { x: (rect.x + rect.w / 2) * TILE, y: (rect.y + rect.h) * TILE - 6 };
     const floor = this.layout.sites.get(`floor:${chamber}`)!;
-    const points: Point[] = [home, { x: aisle, y: home.y }, { x: aisle, y: door }];
-    points.push(...(site.key === floor.key ? [anchorOf(floor)] : route(floor, site)));
+    const points: Point[] = [door, ...(site.key === floor.key ? [anchorOf(floor)] : route(floor, site))];
     return points.filter((point, i) => i === 0 || point.x !== points[i - 1].x || point.y !== points[i - 1].y);
   }
 
@@ -682,11 +674,18 @@ export class WorldScene extends Phaser.Scene {
     return { delivered: total, total };
   }
 
-  private tweenAlong(target: Phaser.GameObjects.Components.Transform & Phaser.GameObjects.GameObject, points: Point[], speed: number, done: () => void) {
+  private tweenAlong(
+    target: Phaser.GameObjects.Components.Transform & Phaser.GameObjects.GameObject,
+    points: Point[],
+    speed: number,
+    done: () => void,
+    turn?: (dx: number, dy: number) => void,
+  ) {
     const steps = points.slice(1).map((point, i) => ({
       x: point.x,
       y: point.y,
       duration: Math.max(1, (this.pathLength([points[i], point]) / speed) * 1000),
+      onStart: () => turn?.(point.x - points[i].x, point.y - points[i].y),
     }));
     if (!steps.length) return done();
     this.tweens.chain({ targets: target, tweens: steps, onComplete: done });
@@ -719,36 +718,48 @@ export class WorldScene extends Phaser.Scene {
     runLeg(0);
   }
 
-  /** A legislator leaves their seat, carries their bills to the next place, and walks back. */
+  /** A legislator comes out of their chamber, carries their bills to the next place, and walks back in. */
   private runWalk(trip: Trip) {
     const id = trip.actor!;
-    const sprite = this.memberSprites.get(id)!;
+    this.sendHome(id); // in case an earlier walk of theirs is still finishing
     const member = this.members.get(id)!;
     const first = this.bills.get(trip.bills[0])!;
+    const start = this.pathFromSeat(id, trip.from ?? trip.to)[0];
+    const sprite = this.add
+      .image(start.x, start.y, "members", id)
+      .setOrigin(0.5, 1)
+      .setDepth(DEPTH.mover)
+      .setAlpha(this.matchesMember(member) ? 1 : 0.25)
+      .setInteractive({ cursor: "pointer" });
+    sprite.setData("target", { type: "member", id } satisfies Target);
+    this.memberSprites.set(id, sprite);
     const walker: Walker = {
       tag: this.text(sprite.x, sprite.y, `${member.name.split(" ").slice(-1)[0]}${trip.role && trip.role !== "sponsor" ? `\n${trip.role}` : ""}`, 7).setOrigin(0.5, 0),
       paper: this.add.image(sprite.x, sprite.y, `paper-${first.type.startsWith("S") ? "Senate" : "House"}`).setDepth(DEPTH.mover + 1).setVisible(false),
       count: trip.bills.length > 1 ? this.text(sprite.x, sprite.y, `×${trip.bills.length}`, 7, PALETTE.yellow).setOrigin(0, 0.5).setVisible(false) : undefined,
     };
     this.walkers.set(id, walker);
-    this.badges.get(id)?.setVisible(false);
-    sprite.setDepth(DEPTH.mover);
     const carrying = (on: boolean) => {
       walker.paper.setVisible(on);
       walker.count?.setVisible(on);
     };
+    // Show the figure's back when it walks away from us.
+    const turn = (dx: number, dy: number) => {
+      const away = Math.abs(dy) > Math.abs(dx) && dy < 0;
+      sprite.setFrame(away ? `${id}:b` : id).setFlipX(!away && dx < 0);
+    };
 
     const goHome = () => {
       carrying(false);
-      this.tweenAlong(sprite, this.pathFromSeat(id, trip.to).reverse(), WALK_SPEED, () => this.sendHome(id));
+      this.tweenAlong(sprite, this.pathFromSeat(id, trip.to).reverse(), WALK_SPEED, () => this.sendHome(id), turn);
     };
     if (!trip.from) {
-      // Introducing: carry the bill from the seat and drop it.
+      // Introducing: carry the bill out and drop it.
       carrying(true);
       this.tweenAlong(sprite, this.pathFromSeat(id, trip.to), WALK_SPEED, () => {
         this.deliver(trip);
         goHome();
-      });
+      }, turn);
       return;
     }
     const from = trip.from;
@@ -758,22 +769,23 @@ export class WorldScene extends Phaser.Scene {
       this.tweenAlong(sprite, route(from, trip.to), WALK_SPEED, () => {
         this.deliver(trip);
         goHome();
-      });
-    });
+      }, turn);
+    }, turn);
   }
 
+  /** Back inside: the figure leaves the map. */
   private sendHome(id: string) {
     const walker = this.walkers.get(id);
     const sprite = this.memberSprites.get(id);
     if (!walker || !sprite) return;
     this.tweens.killTweensOf(sprite);
-    const home = this.homes.get(id)!;
-    sprite.setPosition(home.x, home.y).setDepth(DEPTH.member + home.y / 10000);
+    sprite.destroy();
+    this.memberSprites.delete(id);
     walker.tag.destroy();
     walker.paper.destroy();
     walker.count?.destroy();
     this.walkers.delete(id);
-    this.applyLod(true);
+    if (this.selected?.type === "member" && this.selected.id === id) this.ring.setVisible(false);
   }
 
   private followWalkers() {
@@ -805,6 +817,11 @@ function formatDay(day: string): string {
 
 export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks): WorldScene {
   const scene = new WorldScene(world, hooks);
+  const interior = new InteriorScene(world, {
+    pick: (id) => scene.select({ type: "member", id }, false),
+    floor: (wing) => scene.select({ type: "site", id: `floor:${wing}` }, false),
+    floorCount: (wing) => scene.billsAt(`floor:${wing}`).length,
+  });
   const game = new Phaser.Game({
     type: Phaser.AUTO,
     parent,
@@ -812,7 +829,7 @@ export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks):
     pixelArt: true,
     // A hidden tab reports a zero-size parent, and WebGL cannot start at zero size.
     scale: { mode: Phaser.Scale.RESIZE, width: Math.max(parent.clientWidth, 320), height: Math.max(parent.clientHeight, 240) },
-    scene,
+    scene: [scene, interior],
     banner: false,
     disableContextMenu: true,
   });
