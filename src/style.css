@@ -920,3 +920,10 @@ button.quiet:active {
   padding: 2px 8px;
   font-size: 12px;
 }
+
+/* Text that can run long (a referral to many committees): a few lines, then it scrolls. */
+.long-text {
+  max-height: 7.5em;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}

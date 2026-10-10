@@ -1,5 +1,6 @@
 import { createMusic } from "./audio/music";
 import { archived, loadCommittees, loadCongresses, loadWorld } from "./data/load";
+import { setMeetingCongress } from "./data/meetings";
 import { ordinal } from "./data/types";
 import { createCalendar } from "./ui/calendar";
 import { createPanel } from "./ui/panel";
@@ -26,6 +27,7 @@ async function main() {
     return;
   }
   const { world, source } = loaded;
+  setMeetingCongress(world.congress);
   // A link to a bill of another Congress opens that Congress.
   const linked = /^#bill=(\d+)-/.exec(decodeURIComponent(location.hash));
   if (linked && Number(linked[1]) !== world.congress) {

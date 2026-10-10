@@ -64,7 +64,7 @@ let committeeFile: Promise<CommitteeFile> | undefined;
 
 /** Committee rosters and meetings, loaded the first time a committee is opened. */
 export function loadCommittees(): Promise<CommitteeFile> {
-  committeeFile ??= fromEither<CommitteeFile>("committees.json").then((result) => result.data);
+  committeeFile ??= fromEither<CommitteeFile>(archived ? "committees.json.gz" : "committees.json").then((result) => result.data);
   return committeeFile;
 }
 

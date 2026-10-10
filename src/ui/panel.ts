@@ -284,7 +284,7 @@ export function createPanel(world: World, actions: PanelActions) {
       el("p", {}, el("span", { class: "chip stage" }, STAGES[bill.loc.kind] ?? bill.loc.kind), site ? el("span", { class: "chip" }, site.label) : null, bill.policy_area ? el("span", { class: "chip" }, bill.policy_area) : null),
       site ? explainSite(site) : null,
       el("h3", {}, "Latest action"),
-      el("p", {}, el("strong", {}, niceDate(bill.last_action.date)), " — ", bill.last_action.text),
+      el("p", { class: "long-text", tabindex: "0" }, el("strong", {}, niceDate(bill.last_action.date)), " — ", bill.last_action.text),
       el("h3", {}, "Sponsor"),
       sponsorButton ? el("ul", { class: "list" }, el("li", {}, sponsorButton)) : el("p", {}, "Unknown"),
       el("p", { class: "note" }, `${bill.cosponsors} cosponsor${bill.cosponsors === 1 ? "" : "s"} · introduced ${niceDate(bill.introduced)}`),

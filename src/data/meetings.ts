@@ -47,9 +47,16 @@ export const liveMeeting = (info: CommitteeInfo, now = Date.now()) => info.meeti
 export const comingMeetings = (info: CommitteeInfo, now = Date.now()) => info.meetings.filter((meeting) => Date.parse(meeting.date) > now);
 export const pastMeetings = (info: CommitteeInfo, now = Date.now()) => info.meetings.filter((meeting) => Date.parse(meeting.date) + ASSUMED_LENGTH <= now);
 
+let congress = 119;
+
+/** Say which Congress the meetings on show belong to, for their links. */
+export function setMeetingCongress(number: number) {
+  congress = number;
+}
+
 /** The meeting's page on Congress.gov. */
 export function meetingUrl(meeting: CommitteeMeeting, chamber: string): string {
-  return meeting.url ?? `https://www.congress.gov/event/119th-congress/${chamber === "Senate" ? "senate" : "house"}-event/${meeting.id}`;
+  return meeting.url ?? `https://www.congress.gov/event/${congress}th-congress/${chamber === "Senate" ? "senate" : "house"}-event/${meeting.id}`;
 }
 
 export function meetingTime(meeting: CommitteeMeeting): string {
