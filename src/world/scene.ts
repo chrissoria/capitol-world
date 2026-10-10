@@ -30,6 +30,8 @@ export interface SceneHooks {
   onClock(label: string | null, progress: number): void;
   /** The view moved inside a building, or back out to the map (null). */
   onPlace(inside: PlaceInfo | null): void;
+  /** The wall calendar in a committee's room was clicked. */
+  onCalendar(code: string): void;
   onReady(): void;
 }
 
@@ -901,6 +903,7 @@ export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks):
   const interior = new InteriorScene(world, {
     pick: (id) => scene.select({ type: "member", id }, false),
     pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place) }, false),
+    calendar: (place) => hooks.onCalendar(place),
     pileInfo: (place) => ({
       count: scene.billsAt(siteKeyOfPlace(place)).length,
       label: place === "House" || place === "Senate" ? "on the floor" : "with the committee",

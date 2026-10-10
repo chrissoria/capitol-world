@@ -644,3 +644,256 @@ button.quiet:active {
   margin-top: 12px;
   text-align: right;
 }
+
+/* ── The wall calendar, held up close ── */
+
+#wall-calendar {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  background: rgba(46, 42, 68, 0.55);
+  overflow: auto;
+}
+
+#wall-calendar[hidden] {
+  display: none;
+}
+
+#wall-calendar .sheet {
+  --mark: var(--house);
+  position: relative;
+  width: min(430px, 100%);
+  background: #fff;
+  border: 4px solid var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+  image-rendering: pixelated;
+}
+
+#wall-calendar .sheet.senate {
+  --mark: var(--senate);
+}
+
+#wall-calendar .rings {
+  position: absolute;
+  top: -12px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-around;
+  pointer-events: none;
+}
+
+#wall-calendar .rings i {
+  width: 6px;
+  height: 16px;
+  background: var(--ink);
+}
+
+#wall-calendar .band {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  gap: 6px;
+  align-items: center;
+  padding: 12px 8px 8px;
+  background: var(--party-r);
+  border-bottom: 4px solid var(--ink);
+  color: #fff;
+  text-align: center;
+}
+
+#wall-calendar .band small {
+  display: block;
+  font-size: 11px;
+  font-weight: bold;
+  letter-spacing: 0.4px;
+}
+
+#wall-calendar .band strong {
+  display: block;
+  font-size: 20px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+#wall-calendar .band button {
+  min-width: 30px;
+  padding: 2px 8px;
+  font-size: 16px;
+}
+
+#wall-calendar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+#wall-calendar .grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  padding: 8px;
+}
+
+#wall-calendar .weekday {
+  text-align: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: var(--muted);
+}
+
+#wall-calendar .day {
+  position: relative;
+  display: block;
+  min-height: 40px;
+  padding: 2px 4px;
+  border: 2px solid var(--paper-edge);
+  border-radius: 0;
+  box-shadow: none;
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: bold;
+  text-align: left;
+  color: var(--muted);
+}
+
+#wall-calendar .day.blank {
+  border-color: transparent;
+  background: none;
+}
+
+#wall-calendar button.day {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: #fff;
+}
+
+#wall-calendar button.day:active {
+  transform: none;
+}
+
+#wall-calendar .day.today {
+  outline: 3px solid var(--yellow);
+  outline-offset: -1px;
+}
+
+#wall-calendar .day.chosen {
+  background: var(--yellow);
+}
+
+#wall-calendar .marks {
+  position: absolute;
+  left: 4px;
+  bottom: 4px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  font-size: 10px;
+  line-height: 8px;
+}
+
+#wall-calendar .marks i,
+#wall-calendar .legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: var(--mark);
+  border: 1px solid var(--ink);
+}
+
+#wall-calendar .coming .marks i,
+#wall-calendar .legend .coming i {
+  background: var(--yellow);
+}
+
+#wall-calendar .legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 0 8px 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#wall-calendar .legend i {
+  margin-right: 4px;
+}
+
+#wall-calendar .legend .count {
+  margin-right: auto;
+}
+
+#wall-calendar .legend button {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+#wall-calendar .notes {
+  margin: 0;
+  padding: 8px 10px 10px;
+  border-top: 4px solid var(--ink);
+  background: var(--paper);
+  max-height: 34vh;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+#wall-calendar .notes.empty {
+  color: var(--muted);
+}
+
+#wall-calendar .notes h3 {
+  margin: 0 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+}
+
+#wall-calendar .notes ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+#wall-calendar .notes li {
+  padding: 6px 8px;
+  border: 2px solid var(--ink);
+  border-left: 8px solid var(--mark);
+  background: #fff;
+}
+
+#wall-calendar .notes li.coming {
+  border-left-color: var(--yellow);
+}
+
+#wall-calendar .notes li > * {
+  display: block;
+}
+
+#wall-calendar .facts,
+#wall-calendar .outcome {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+#wall-calendar .outcome {
+  margin-top: 3px;
+  color: var(--ink);
+}
+
+#wall-calendar .acts {
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+#wall-calendar .acts button {
+  padding: 2px 8px;
+  font-size: 12px;
+}

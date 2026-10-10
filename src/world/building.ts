@@ -74,6 +74,8 @@ export interface Building {
   cells: Uint8Array;
   /** Where the bills on the floor are piled, in pixels. */
   clerk: { x: number; y: number };
+  /** A wall calendar that can be taken down and read, in pixels. Committee rooms only. */
+  calendar?: { x: number; y: number };
 }
 
 export interface Leaders {
@@ -927,7 +929,7 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
   const backMinority = tiers === 1 ? minority.length : Math.min(minority.length, perTier - backMajority);
   const left = Math.max(backMajority, majority.length - backMajority, 3);
   const right = Math.max(backMinority, minority.length - backMinority, 3);
-  const iw = Math.max(28, left + right + 8);
+  const iw = Math.max(28, left + right + 11); // room at the right of the dais for the calendar board
   const lastDesk = tiers * 2; // row of the front desk, counted from the first floor row
   const ih = lastDesk + 15;
   const W = iw + 2;
@@ -935,11 +937,11 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
 
   const template = ROOM_TEMPLATES[hash(spec.code) % ROOM_TEMPLATES.length];
   const kit = makeKit(W, H, house ? PALETTE.houseCarpet : PALETTE.senateCarpet, house ? "#b5dccd" : "#d2c0e3", hash(spec.code));
-  const { ground, over, g, o, cells, rooms, spots, staff, seats, spot, person, room, door } = kit;
+  const { ground, over, g, o, cells, rooms, spots, staff, seats, block, spot, person, room, door } = kit;
   const { table, chairDown, chairUp, plant, flag, cooler, tripod, picture, papers, rug, shelf, bust, coatRack, monitor } = kit;
 
   const { ix, iy } = room("room", spec.name, 0, 0, W, H, template.floor);
-  const boundary = ix + 4 + left + Math.floor((iw - 8 - left - right) / 2); // first minority seat
+  const boundary = ix + 4 + left + Math.floor((iw - 11 - left - right) / 2); // first minority seat
   const centre = ix + Math.floor(iw / 2);
   door(centre - 1, H - 1, 2);
   kit.paint();
@@ -954,7 +956,7 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
   box(g, boundary * T - 3, wallY + 7, 6, 6, PALETTE.goldDark);
   const wallSpots: number[] = [];
   for (let tx = ix + 3; tx < boundary - 6; tx += 5) wallSpots.push(tx);
-  for (let tx = boundary + 6; tx < ix + iw - 4; tx += 5) wallSpots.push(tx);
+  for (let tx = boundary + 6; tx < ix + iw - 8; tx += 5) wallSpots.push(tx);
   for (const tx of wallSpots) {
     const x = tx * T;
     if (template.wall === "shelves") shelf(tx, iy, 2);
@@ -970,6 +972,21 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
   }
   flag(ix + 1, iy);
   flag(ix + iw - 2, iy, accent);
+  // The committee's calendar, on a board by the dais.
+  const boardX = (ix + iw - 6) * T;
+  const boardY = iy * T;
+  box(o, boardX + 6, boardY + 10, 2, 5, PALETTE.ink);
+  box(o, boardX + 40, boardY + 10, 2, 5, PALETTE.ink);
+  framed(o, boardX, boardY - 18, 48, 30, PALETTE.white);
+  box(o, boardX + 1, boardY - 17, 46, 7, PALETTE.partyR);
+  for (let ring = 5; ring < 46; ring += 9) box(o, boardX + ring, boardY - 20, 2, 4, PALETTE.ink);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 7; col++) {
+      const mark = (row * 7 + col + spec.code.charCodeAt(3)) % 6;
+      box(o, boardX + 4 + col * 6, boardY - 7 + row * 6, 4, 4, mark === 0 ? accent : mark === 3 && row === 2 ? PALETTE.yellow : PALETTE.stoneEdge);
+    }
+  }
+  block(ix + iw - 6, iy, 3);
 
   // The dais. Majority to the left of the middle, minority to the right, senior members nearest it.
   framed(g, (boundary - left - 1) * T - 4, iy * T + 4, (left + right + 2) * T + 8, (lastDesk + 1) * T, "#c9a06a");
@@ -1095,6 +1112,7 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
     pages: 1,
     cells,
     clerk: { x: (ix + 4) * T, y: (well + 2) * T - 2 },
+    calendar: { x: boardX + 24, y: boardY - 3 },
   };
 }
 

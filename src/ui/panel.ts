@@ -1,7 +1,7 @@
 // The side panel: everything on the map is also reachable here with a keyboard.
 
 import { loadSearch } from "../data/load";
-import { comingMeetings, liveMeeting, meetingTime, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
+import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel } from "../data/types";
 import type { Site } from "../world/layout";
@@ -276,7 +276,8 @@ export function createPanel(world: World, actions: PanelActions) {
     if (meeting.sub) facts.push(info.subcommittees[meeting.sub] ?? "Subcommittee");
     if (meeting.n_bills) facts.push(`${meeting.n_bills} bill${meeting.n_bills === 1 ? "" : "s"}`);
     if (meeting.n_witnesses) facts.push(`${meeting.n_witnesses} witness${meeting.n_witnesses === 1 ? "" : "es"}`);
-    const billRows = meeting.bills.map((id) => {
+    const listed = meeting.bills ?? [];
+    const billRows = listed.map((id) => {
       const [, type, number] = id.split("-");
       const known = bills.get(id);
       const button = el("button", { type: "button" }, el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })}${known ? ` · ${known.title}` : ""}`), known ? null : el("span", { class: "row-sub" }, "Not on the map: no action in the last 30 days"));
@@ -297,8 +298,8 @@ export function createPanel(world: World, actions: PanelActions) {
       meeting.outcomes?.length ? el("ul", { class: "outcomes" }, ...meeting.outcomes.map((line) => el("li", {}, line))) : null,
       billRows.length ? el("p", {}, el("strong", {}, past ? "Bills taken up" : "Bills on the agenda")) : null,
       billRows.length ? el("ul", { class: "list" }, ...billRows) : null,
-      meeting.n_bills > meeting.bills.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - meeting.bills.length} more, listed on Congress.gov.`) : null,
-      el("p", {}, stage, " ", el("a", { href: meeting.url, target: "_blank", rel: "noopener" }, "Videos and documents on Congress.gov ↗")),
+      meeting.n_bills > listed.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - listed.length} more, listed on Congress.gov.`) : null,
+      el("p", {}, stage, " ", el("a", { href: meetingUrl(meeting, info.chamber), target: "_blank", rel: "noopener" }, "Videos and documents on Congress.gov ↗")),
     );
   }
 
@@ -306,7 +307,7 @@ export function createPanel(world: World, actions: PanelActions) {
   function committeeBlock(code: string, info: CommitteeInfo) {
     const live = liveMeeting(info);
     const coming = comingMeetings(info);
-    const past = pastMeetings(info);
+    const past = pastMeetings(info).filter((meeting) => !meeting.brief);
     const order = (side: string) => info.members.filter((seat) => (seat.side === "majority") === (side === "majority")).sort((a, b) => a.rank - b.rank);
     const roster = [...order("majority"), ...order("minority")].map((seat) => {
       const member = members.get(seat.id);

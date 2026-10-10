@@ -1,5 +1,6 @@
 import { createMusic } from "./audio/music";
 import { loadCommittees, loadWorld } from "./data/load";
+import { createCalendar } from "./ui/calendar";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
 
@@ -43,6 +44,8 @@ async function main() {
   const clock = $("clock");
   let current: Target | null = null;
   let panel: ReturnType<typeof createPanel> | undefined;
+  const committeeOf = (code: string) => loadCommittees().then((file) => file.committees[code], () => undefined);
+  const calendar = createCalendar($("wall-calendar"), { committee: committeeOf, stage: (code, meetingId) => scene.stage(code, meetingId) });
 
   const scene: WorldScene = startGame($("game"), world, {
     onSelect(target) {
@@ -60,7 +63,11 @@ async function main() {
       }
       panel?.refresh(current);
     },
+    onCalendar(code) {
+      calendar.open(code);
+    },
     onPlace(inside) {
+      calendar.close();
       music.setTrack(inside ? "inside" : "map");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
@@ -75,7 +82,7 @@ async function main() {
         billsAt: (key) => scene.billsAt(key),
         siteOf: (id) => scene.siteOf(id),
         siteByKey: (key) => scene.siteByKey(key),
-        committee: (code) => loadCommittees().then((file) => file.committees[code], () => undefined),
+        committee: committeeOf,
         stage: (code, meetingId) => scene.stage(code, meetingId),
         whereIs: (id) => scene.whereIs(id),
       });
@@ -90,7 +97,9 @@ async function main() {
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
   backButton.addEventListener("click", () => scene.leave());
   addEventListener("keydown", (event) => {
-    if (event.key === "Escape") scene.leave();
+    if (event.key !== "Escape") return;
+    if (calendar.isOpen) calendar.close();
+    else scene.leave();
   });
   $("zoom-in").addEventListener("click", () => scene.zoomBy(1.4));
   $("zoom-out").addEventListener("click", () => scene.zoomBy(1 / 1.4));

@@ -65,6 +65,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/world/interior.ts` the inside scene: who is where and what they do next
 - `src/world/camera.ts` pan and zoom, shared by both scenes
 - `src/ui/panel.ts` the side panel: inspector (with a Back trail), search, filters, and the About dialog
+- `src/ui/calendar.ts` the wall calendar from a committee room: every meeting of the Congress, month by month
 - `src/ui/roster.ts` the Roster tab: every member, where their figure is, and a click to go there
 - `src/ui/explain.ts` the folded "What happens here?" notes on each building's part in the process
 - `src/ui/stats.ts` the Stats tab: introductions by period, party and member, and how far they got
