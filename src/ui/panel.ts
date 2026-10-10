@@ -8,6 +8,7 @@ import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
 import { add, el, niceDate, put } from "./dom";
 import { explainSite, explainStage } from "./explain";
+import { createRoster } from "./roster";
 import { createStats } from "./stats";
 
 export const STAGES: Record<string, string> = {
@@ -44,6 +45,8 @@ export interface PanelActions {
   committee(code: string): Promise<CommitteeInfo | undefined>;
   /** Show a committee's room as it would have been for one of its meetings. */
   stage(code: string, meetingId: string): void;
+  /** Where a member's figure is in the world right now, in a few words. */
+  whereIs(memberId: string): string;
 }
 
 function congressUrl(id: string): string {
@@ -60,13 +63,14 @@ export function createPanel(world: World, actions: PanelActions) {
     search: document.getElementById("tab-search")!,
     filters: document.getElementById("tab-filters")!,
     stats: document.getElementById("tab-stats")!,
-    about: document.getElementById("tab-about")!,
+    roster: document.getElementById("tab-roster")!,
   };
 
   function showTab(name: keyof typeof sections) {
     for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
     for (const [key, section] of Object.entries(sections)) section.hidden = key !== name;
     if (name === "stats") stats.open();
+    if (name === "roster") roster.open();
   }
   for (const tab of tabs) tab.addEventListener("click", () => showTab(tab.dataset.tab as keyof typeof sections));
 
@@ -466,10 +470,20 @@ export function createPanel(world: World, actions: PanelActions) {
 
   const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }));
 
-  // ── About ──────────────────────────────────────────────────────────────────
+  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }));
 
-  add(sections.about, 
-    el("h2", {}, "About this map"),
+  // ── About ──────────────────────────────────────────────────────────────────
+  // Out of the way: a small link under the title opens it.
+
+  const about = document.getElementById("about") as HTMLDialogElement;
+  const aboutOpen = document.getElementById("about-open")!;
+  aboutOpen.hidden = false;
+  aboutOpen.addEventListener("click", () => about.showModal());
+  about.addEventListener("click", (event) => {
+    if (event.target === about) about.close(); // a click on the backdrop
+  });
+  add(document.getElementById("about-body")!, 
+    el("h2", { id: "about-title" }, "About this map"),
     el("p", {}, "Capitol World shows where the bills of the ", `${world.congress}th`, " U.S. Congress are in the legislative process. Bills start in a hopper at the bottom and move up: to a committee, onto a calendar, to the floor, across to the other chamber, and on to the White House."),
     el("h3", {}, "The data"),
     el("p", {}, "Everything comes from the Congress.gov API through the public dataset ", el("a", { href: "https://huggingface.co/datasets/chrissoria/federal-bills-active", target: "_blank", rel: "noopener" }, "chrissoria/federal-bills-active"), ", refreshed each morning."),

@@ -382,6 +382,17 @@ export class InteriorScene extends Phaser.Scene {
 
   // ── Called from the map scene ──────────────────────────────────────────────
 
+  /** The room a member's figure is in, or null when they are not in this building. */
+  whereIs(id: string): string | null {
+    if (!this.ready) return null;
+    const agent = this.agents.get(id);
+    if (!agent?.member) return null;
+    if (this.committee) return "At the dais";
+    const room = agent.at.room === "corridor" ? "Corridor" : (this.b.rooms.find((entry) => entry.key === agent.at.room)?.label ?? "");
+    if (agent.moving) return agent.at === agent.home ? "Walking back to their seat" : `Walking to the ${room}`;
+    return agent.at === agent.home ? "At their seat" : room;
+  }
+
   setSelected(id: string | null) {
     this.selectedId = id;
     if (this.ready) this.ring.setVisible(Boolean(id && this.agents.has(id)));

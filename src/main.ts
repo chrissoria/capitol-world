@@ -77,6 +77,7 @@ async function main() {
         siteByKey: (key) => scene.siteByKey(key),
         committee: (code) => loadCommittees().then((file) => file.committees[code], () => undefined),
         stage: (code, meetingId) => scene.stage(code, meetingId),
+        whereIs: (id) => scene.whereIs(id),
       });
       replayButton.hidden = !scene.hasEvents;
       const initial = targetFromHash();

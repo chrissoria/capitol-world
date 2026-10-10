@@ -493,6 +493,16 @@ export class WorldScene extends Phaser.Scene {
       });
   }
 
+  /** Where a member's figure is right now, in a few words. */
+  whereIs(memberId: string): string {
+    if (this.memberSprites.has(memberId)) return "Out on the map, carrying a bill";
+    const chamber = this.members.get(memberId)?.chamber || "Capitol";
+    const inside = this.inside ? this.interior.whereIs(memberId) : null;
+    if (!inside) return `In the ${chamber}`;
+    const building = this.inside === "House" || this.inside === "Senate" ? this.inside : (this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
+    return `${building} · ${inside}`;
+  }
+
   /** Show a committee's room as it would have been for one of its meetings. */
   stage(code: string, meetingId: string) {
     this.enter(code, meetingId);
