@@ -13,6 +13,10 @@ walk somewhere, do something and come back. That bustle is ambient animation on
 an invented floor plan; only the bills, where they are and who carried them come
 from the data.
 
+The Stats tab counts every measure of the Congress by the date it was
+introduced (the latest day, 7 days, 30 days, 12 months or the whole Congress)
+and shows how far those measures have got, split by the sponsor's party.
+
 Live at <https://christophersoria.com/capitol-world/>.
 
 ## Data
@@ -52,6 +56,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/world/interior.ts` the inside scene: who is where and what they do next
 - `src/world/camera.ts` pan and zoom, shared by both scenes
 - `src/ui/panel.ts` the side panel: inspector, search, filters, about
+- `src/ui/stats.ts` the Stats tab: introductions by period, party and member, and how far they got
 
 The figures are generated at random from each member's ID and are not likenesses.
 Bill summaries are machine-written. Not affiliated with Congress.

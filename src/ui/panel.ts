@@ -5,6 +5,8 @@ import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel } from "../data/types";
 import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
+import { add, el, niceDate, put } from "./dom";
+import { createStats } from "./stats";
 
 export const STAGES: Record<string, string> = {
   hopper: "Just introduced",
@@ -39,32 +41,6 @@ export interface PanelActions {
   siteByKey(key: string): Site | undefined;
 }
 
-type Child = Node | string | null | undefined | false;
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, props: Record<string, string> = {}, ...children: Child[]): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (key === "class") node.className = value;
-    else node.setAttribute(key, value);
-  }
-  add(node, ...children);
-  return node;
-}
-
-function add(target: Element, ...children: Child[]) {
-  for (const child of children) if (child) target.append(child);
-}
-
-function put(target: Element, ...children: Child[]) {
-  target.replaceChildren();
-  add(target, ...children);
-}
-
-function niceDate(day: string): string {
-  if (!day) return "";
-  return new Date(`${day.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-}
-
 function congressUrl(id: string): string {
   const [congress, type, number] = id.split("-");
   return `https://www.congress.gov/bill/${congress}th-congress/${SLUGS[type] ?? "house-bill"}/${number}`;
@@ -78,12 +54,14 @@ export function createPanel(world: World, actions: PanelActions) {
     inspect: document.getElementById("tab-inspect")!,
     search: document.getElementById("tab-search")!,
     filters: document.getElementById("tab-filters")!,
+    stats: document.getElementById("tab-stats")!,
     about: document.getElementById("tab-about")!,
   };
 
   function showTab(name: keyof typeof sections) {
     for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
     for (const [key, section] of Object.entries(sections)) section.hidden = key !== name;
+    if (name === "stats") stats.open();
   }
   for (const tab of tabs) tab.addEventListener("click", () => showTab(tab.dataset.tab as keyof typeof sections));
 
@@ -299,6 +277,8 @@ export function createPanel(world: World, actions: PanelActions) {
     summary, reset,
   );
   summary.textContent = "Nothing is filtered.";
+
+  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }));
 
   // ── About ──────────────────────────────────────────────────────────────────
 

@@ -101,6 +101,13 @@ export interface SearchIndex {
   status: number[];
   policy_area: number[];
   date: string[];
+  /** Added later, so an older data file may lack them. */
+  pending?: number;
+  introduced?: string[];
+  /** One character per bill: the sponsor's party (D, R, I or ?). */
+  party?: string;
+  /** One digit per bill: 0 in committee, 1 out of committee, 2 failed a floor vote, 3 passed a chamber, 4 passed both, 5 law. */
+  stage?: string;
 }
 
 export function locKey(loc: Loc): string {

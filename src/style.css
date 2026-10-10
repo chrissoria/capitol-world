@@ -395,3 +395,93 @@ a {
     transition: none;
   }
 }
+
+/* ── Stats ── */
+
+.stat-big {
+  font-size: 34px;
+  font-weight: bold;
+  line-height: 1.1;
+  margin-top: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.meter {
+  height: 8px;
+  margin: 3px 0;
+  background: var(--paper-edge);
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+
+.meter i.R,
+.chart i.R {
+  background: var(--party-r);
+}
+
+.meter i.D,
+.chart i.D {
+  background: var(--party-d);
+}
+
+.meter i.I,
+.chart i.I {
+  background: var(--party-i);
+}
+
+#tab-stats .list li {
+  padding: 6px 0;
+}
+
+#tab-stats .list li:has(button) {
+  padding: 0;
+}
+
+#tab-stats .row-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 90px;
+  padding: 4px 4px 0;
+  background: #fff;
+  border: 2px solid var(--ink);
+  border-radius: 4px;
+}
+
+.chart .column {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-width: 2px;
+}
+
+.chart .column i {
+  display: block;
+  width: 100%;
+}
+
+.chart-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+#tabs button {
+  font-size: 12px;
+}
