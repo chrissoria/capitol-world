@@ -124,7 +124,7 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     framed(ctx, wx, wallTop, 10, 9, PALETTE.window);
     box(ctx, wx + 4, wallTop + 1, 1, 7, PALETTE.ink);
   }
-  if (entry.style === "whitehouse" || entry.style === "archive" || entry.style === "hall") {
+  if (entry.style === "archive" || entry.style === "hall") {
     for (let cx = x + 6; cx < x + w - 6; cx += 14) {
       if (cx + 4 > doorX - 2 && cx < doorX + doorW + 2) continue;
       framed(ctx, cx, y + roofH - 2, 5, h - roofH + 2, PALETTE.white);
@@ -132,12 +132,6 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     // Pediment.
     const mid = x + w / 2;
     for (let i = 0; i < 9; i++) box(ctx, mid - 18 + i * 2, y + roofH - 4 - i, 36 - i * 4, 1, i === 8 ? PALETTE.ink : PALETTE.white);
-  }
-  if (entry.style === "whitehouse") {
-    box(ctx, x + w / 2, y - 12, 1, 12, PALETTE.ink);
-    box(ctx, x + w / 2 + 1, y - 12, 8, 5, PALETTE.partyR);
-    box(ctx, x + w / 2 + 1, y - 12, 4, 3, PALETTE.partyD);
-    box(ctx, x + w / 2 + 1, y - 9, 8, 1, PALETTE.white);
   }
   if (entry.style === "calendar") {
     // A wall calendar on the roof.
@@ -147,6 +141,108 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     for (let gx = 0; gx < 7; gx++)
       for (let gy = 0; gy < Math.floor((roofH - 22) / 5); gy++) box(ctx, bx + 4 + gx * 5, y + 15 + gy * 5, 3, 3, PALETTE.stoneEdge);
   }
+}
+
+/** The north front: flat balustraded roof, two storeys of windows, the pedimented portico, low wings. */
+function drawWhiteHouse(ctx: CanvasRenderingContext2D, entry: Site) {
+  const { x, y, w, h } = scale(entry.rect);
+  const white = "#fbfaf5";
+  const shade = "#dcd9cf";
+  const deep = "#c4c1b6";
+  const roofTone = "#e4e1d7";
+  const mid = x + Math.round(w / 2);
+  const wing = 44;
+  const mx = x + wing;
+  const mw = w - wing * 2;
+  const top = y + 38; // where the wall begins
+  const bottom = y + h - 6;
+
+  // Low colonnaded wings either side.
+  for (const wx of [x, x + w - wing - 2]) {
+    framed(ctx, wx, y + 94, wing + 2, bottom - (y + 94), deep);
+    for (let cx = wx + 3; cx < wx + wing - 2; cx += 9) framed(ctx, cx, y + 98, 5, bottom - (y + 98), white);
+    framed(ctx, wx - 1, y + 88, wing + 4, 8, white);
+    for (let bx = wx + 2; bx < wx + wing; bx += 4) box(ctx, bx, y + 90, 1, 4, shade);
+  }
+
+  // Flat roof with chimneys and a balustrade along the front edge.
+  framed(ctx, mx - 2, y + 8, mw + 4, 32, roofTone);
+  for (let line = y + 13; line < y + 30; line += 6) box(ctx, mx, line, mw, 1, shade);
+  for (const cx of [mx + 34, mx + 78, mx + mw - 90, mx + mw - 46]) {
+    framed(ctx, cx, y + 11, 12, 11, white);
+    box(ctx, cx + 1, y + 19, 10, 2, shade);
+  }
+  framed(ctx, mx - 3, y + 30, mw + 6, 9, white);
+  for (let bx = mx; bx < mx + mw; bx += 4) box(ctx, bx, y + 32, 1, 5, shade);
+
+  // The wall: cornice, a band between the storeys, and a darker base.
+  framed(ctx, mx, top, mw, bottom - top, white);
+  box(ctx, mx + 1, top + 1, mw - 2, 3, shade);
+  box(ctx, mx + 1, y + 86, mw - 2, 2, shade);
+  box(ctx, mx + 1, bottom - 9, mw - 2, 8, shade);
+  const bays = 11;
+  const pitch = Math.floor((mw - 24) / (bays - 1));
+  const first = mid - Math.round((pitch * (bays - 1)) / 2) - 6;
+  for (let bay = 0; bay < bays; bay++) {
+    const wx = first + bay * pitch;
+    const centre = bay === (bays - 1) / 2;
+    // Upper windows, with alternating pointed and flat hoods.
+    framed(ctx, wx, y + 54, 12, 22, PALETTE.window);
+    box(ctx, wx + 5, y + 55, 2, 20, PALETTE.ink);
+    box(ctx, wx + 1, y + 64, 10, 1, PALETTE.ink);
+    box(ctx, wx - 2, y + 50, 16, 2, deep);
+    if (bay % 2 === 0) {
+      box(ctx, wx + 1, y + 48, 10, 2, deep);
+      box(ctx, wx + 4, y + 46, 4, 2, deep);
+    }
+    box(ctx, wx - 1, y + 76, 14, 2, shade);
+    if (centre) continue;
+    // Taller ground-floor windows.
+    framed(ctx, wx, y + 96, 12, 26, PALETTE.window);
+    box(ctx, wx + 5, y + 97, 2, 24, PALETTE.ink);
+    box(ctx, wx + 1, y + 108, 10, 1, PALETTE.ink);
+    box(ctx, wx - 2, y + 92, 16, 2, deep);
+  }
+
+  // The portico: four tall columns under a pediment, with the door behind.
+  const pw = 96;
+  const px = mid - pw / 2;
+  box(ctx, px, top + 10, pw, bottom - top - 11, "#efede5");
+  framed(ctx, mid - 9, y + 98, 18, bottom - (y + 98), "#3d3f4a");
+  box(ctx, mid - 1, y + 99, 2, bottom - (y + 100), PALETTE.ink);
+  box(ctx, mid - 4, y + 114, 2, 3, PALETTE.yellow);
+  box(ctx, mid + 2, y + 114, 2, 3, PALETTE.yellow);
+  framed(ctx, mid - 10, y + 91, 20, 8, PALETTE.window);
+  box(ctx, mid, y + 62, 1, 8, PALETTE.ink);
+  framed(ctx, mid - 3, y + 69, 7, 8, PALETTE.yellow);
+  framed(ctx, px - 5, top - 1, pw + 10, 10, white);
+  box(ctx, px - 4, top + 6, pw + 8, 2, shade);
+  for (let row = 0; row < 24; row++) {
+    const half = Math.round((pw / 2 + 5) * (1 - row / 24));
+    box(ctx, mid - half - 1, top - 2 - row, half * 2 + 2, 1, PALETTE.ink);
+    if (half > 1) box(ctx, mid - half, top - 2 - row, half * 2, 1, row < 2 || half < 4 ? white : row % 23 === 0 ? white : "#f3f1ea");
+  }
+  box(ctx, mid - 6, top - 12, 12, 5, shade);
+  for (const cx of [px + 2, px + 30, px + pw - 38, px + pw - 10]) {
+    framed(ctx, cx, top + 9, 8, bottom - top - 12, white);
+    box(ctx, cx + 5, top + 10, 2, bottom - top - 14, shade);
+    framed(ctx, cx - 2, top + 8, 12, 4, white);
+    framed(ctx, cx - 2, bottom - 6, 12, 5, white);
+  }
+  framed(ctx, px - 8, bottom - 2, pw + 16, 5, white);
+  framed(ctx, px - 14, bottom + 2, pw + 28, 5, PALETTE.stone);
+
+  // Shrubs along the base, and the flag on the roof.
+  for (let sx = mx + 6; sx < mx + mw - 12; sx += 20) {
+    if (sx + 12 > px - 16 && sx < px + pw + 16) continue;
+    framed(ctx, sx, bottom - 5, 12, 8, "#3f8f4a");
+    box(ctx, sx + 2, bottom - 4, 4, 2, "#58a85f");
+  }
+  const pole = y - 16;
+  box(ctx, mid, pole, 1, 30, PALETTE.ink);
+  box(ctx, mid + 1, pole, 14, 9, PALETTE.partyR);
+  for (let stripe = 1; stripe < 9; stripe += 4) box(ctx, mid + 1, pole + stripe, 14, 2, PALETTE.white);
+  box(ctx, mid + 1, pole, 6, 5, PALETTE.partyD);
 }
 
 function drawSmall(ctx: CanvasRenderingContext2D, entry: Site) {
@@ -395,6 +491,7 @@ export function drawGround(layout: Layout): HTMLCanvasElement {
     box(ctx, dock.x, dock.y + 2, dock.w, 1, PALETTE.stoneEdge);
     if (entry.style === "chamber") drawChamber(ctx, entry);
     else if (entry.style === "conference") drawConference(ctx, entry);
+    else if (entry.style === "whitehouse") drawWhiteHouse(ctx, entry);
     else if (["inbox", "desk", "hopper", "bin"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }
