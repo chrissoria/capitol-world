@@ -1,0 +1,397 @@
+:root {
+  --ink: #2e2a44;
+  --paper: #fbf6e6;
+  --paper-edge: #e3d8b8;
+  --muted: #6b6680;
+  --accent: #2f9e8f;
+  --accent-ink: #ffffff;
+  --house: #2f9e8f;
+  --senate: #8f5fb0;
+  --party-r: #d8433b;
+  --party-d: #3a6fd8;
+  --party-i: #5c9a4f;
+  --yellow: #ffd84a;
+  font-family: "Trebuchet MS", Verdana, sans-serif;
+  color: var(--ink);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #5fae55;
+  overflow: hidden;
+}
+
+#app {
+  display: grid;
+  grid-template-columns: 1fr 350px;
+  height: 100%;
+}
+
+#stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#game {
+  position: absolute;
+  inset: 0;
+  touch-action: none;
+}
+
+#game canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+#hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+
+#hud > * {
+  pointer-events: auto;
+}
+
+#hud-title {
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  padding: 6px 10px;
+  box-shadow: 3px 3px 0 var(--ink);
+  line-height: 1.25;
+}
+
+#hud-title strong {
+  display: block;
+  font-size: 16px;
+  letter-spacing: 0.5px;
+}
+
+#stamp {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+#hud-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+button {
+  font: inherit;
+  font-weight: bold;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  padding: 5px 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+button:hover {
+  background: #fff;
+}
+
+button:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+#clock {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px 8px;
+  font-weight: bold;
+  font-size: 13px;
+  text-align: center;
+  min-width: 190px;
+}
+
+#clock-bar {
+  height: 4px;
+  margin-top: 5px;
+  background: #57526e;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#clock-bar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--yellow);
+  transition: width 0.4s linear;
+}
+
+#loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #5fae55;
+  color: #fff;
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+
+/* ── Panel ── */
+
+#panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--paper);
+  border-left: 4px solid var(--ink);
+}
+
+#tabs {
+  display: flex;
+  border-bottom: 3px solid var(--ink);
+}
+
+#tabs button {
+  flex: 1;
+  border: 0;
+  border-right: 2px solid var(--ink);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 9px 4px;
+  background: var(--paper-edge);
+}
+
+#tabs button:last-child {
+  border-right: 0;
+}
+
+#tabs button[aria-selected="true"] {
+  background: var(--paper);
+  box-shadow: inset 0 -4px 0 var(--accent);
+}
+
+#tabs button:active {
+  transform: none;
+}
+
+.tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tab h2 {
+  font-size: 17px;
+  margin: 0 0 4px;
+  line-height: 1.25;
+}
+
+.tab h3 {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin: 16px 0 6px;
+}
+
+.tab p {
+  margin: 6px 0;
+}
+
+.kicker {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.chip {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 1px 7px;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+  margin: 2px 4px 2px 0;
+}
+
+.chip.stage {
+  background: var(--yellow);
+}
+
+.pin {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  border: 2px solid var(--ink);
+  vertical-align: -1px;
+}
+
+.pin.R {
+  background: var(--party-r);
+}
+
+.pin.D {
+  background: var(--party-d);
+  border-radius: 50%;
+}
+
+.pin.I {
+  background: var(--party-i);
+  transform: rotate(45deg) scale(0.85);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list li {
+  border-top: 2px solid var(--paper-edge);
+}
+
+.list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  background: none;
+  font-weight: normal;
+  padding: 7px 4px;
+}
+
+.list button:hover {
+  background: #fff;
+}
+
+.list button:active {
+  transform: none;
+}
+
+.list .row-title {
+  display: block;
+  font-weight: bold;
+}
+
+.list .row-sub {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 1fr 44px;
+  gap: 8px;
+  align-items: center;
+}
+
+.bar-row .count {
+  text-align: right;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin: 12px 0 4px;
+}
+
+input[type="search"],
+select {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  padding: 7px 8px;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: #fff;
+}
+
+a {
+  color: #1d6e9c;
+  font-weight: bold;
+}
+
+.back {
+  margin-bottom: 10px;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+@media (max-width: 760px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr 44%;
+  }
+
+  #panel {
+    border-left: 0;
+    border-top: 4px solid var(--ink);
+  }
+
+  #hud-title strong {
+    font-size: 14px;
+  }
+
+  #fit {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #clock-bar i {
+    transition: none;
+  }
+}

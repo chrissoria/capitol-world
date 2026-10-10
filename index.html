@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="description" content="A pixel-art map of where the active bills of the U.S. Congress are right now." />
+    <title>Capitol World</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <main id="stage">
+        <div id="game" aria-label="Map of Congress. Use the panel to search and browse the same information."></div>
+        <div id="hud">
+          <div id="hud-title">
+            <strong>Capitol World</strong>
+            <span id="stamp">Loading…</span>
+          </div>
+          <div id="hud-buttons">
+            <button id="replay" type="button" hidden>▶ Replay last day</button>
+            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button id="fit" type="button">Whole map</button>
+          </div>
+        </div>
+        <div id="clock" hidden><span id="clock-day"></span><div id="clock-bar"><i></i></div></div>
+        <div id="loading">Loading the Capitol…</div>
+      </main>
+      <aside id="panel">
+        <nav id="tabs" role="tablist">
+          <button role="tab" data-tab="inspect" aria-selected="true">Inspect</button>
+          <button role="tab" data-tab="search" aria-selected="false">Search</button>
+          <button role="tab" data-tab="filters" aria-selected="false">Filters</button>
+          <button role="tab" data-tab="about" aria-selected="false">About</button>
+        </nav>
+        <section id="tab-inspect" class="tab"></section>
+        <section id="tab-search" class="tab" hidden></section>
+        <section id="tab-filters" class="tab" hidden></section>
+        <section id="tab-about" class="tab" hidden></section>
+      </aside>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

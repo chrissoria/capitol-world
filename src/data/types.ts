@@ -1,0 +1,122 @@
+// Shapes of the snapshot files written by build_world_snapshot.py (cat-pol-datasets).
+
+export type Chamber = "House" | "Senate" | "";
+
+export type LocKind =
+  | "hopper"
+  | "committee"
+  | "referral_desk"
+  | "calendar"
+  | "floor"
+  | "other_chamber"
+  | "conference"
+  | "president"
+  | "law"
+  | "vetoed"
+  | "adopted";
+
+export interface Loc {
+  kind: LocKind;
+  chamber: Chamber;
+  committee: string;
+}
+
+export interface Member {
+  id: string;
+  name: string;
+  party: string;
+  state: string;
+  district: number | null;
+  chamber: Chamber;
+  n_world: number;
+  n_total: number;
+  role?: string;
+}
+
+export interface Committee {
+  code: string;
+  name: string;
+  chamber: string;
+  n_bills: number;
+}
+
+export interface Bill {
+  id: string;
+  type: string;
+  number: string;
+  title: string;
+  sponsor: string;
+  cosponsors: number;
+  policy_area: string;
+  status: string;
+  loc: Loc;
+  last_action: { date: string; text: string };
+  introduced: string;
+  summary: string;
+  url: string;
+}
+
+export interface MoveEvent {
+  bill: string;
+  date: string;
+  seq: number;
+  from: string | null;
+  to: string;
+  text: string;
+  /** Member id of the legislator who carried the bill, when known. */
+  actor?: string | null;
+  actor_role?: string | null;
+}
+
+export interface World {
+  schema: number;
+  generated_at: string;
+  data_through: string;
+  congress: number;
+  window: { world_since: string; events_since: string };
+  counts: {
+    total: number;
+    world: number;
+    events: number;
+    guessed_locations: number;
+    by_status: Record<string, number>;
+    by_kind: Record<string, number>;
+  };
+  roles?: { chairs: Record<string, string>; leaders: Record<string, string> };
+  members: Member[];
+  committees: Committee[];
+  bills: Bill[];
+  events: MoveEvent[];
+}
+
+export interface SearchIndex {
+  schema: number;
+  data_through: string;
+  sponsors: string[];
+  statuses: string[];
+  policy_areas: string[];
+  id: string[];
+  title: string[];
+  sponsor: number[];
+  status: number[];
+  policy_area: number[];
+  date: string[];
+}
+
+export function locKey(loc: Loc): string {
+  return [loc.kind, loc.chamber, loc.committee].filter(Boolean).join(":");
+}
+
+export function billLabel(bill: { type: string; number: string }): string {
+  const names: Record<string, string> = {
+    HR: "H.R.",
+    S: "S.",
+    HRES: "H.Res.",
+    SRES: "S.Res.",
+    HJRES: "H.J.Res.",
+    SJRES: "S.J.Res.",
+    HCONRES: "H.Con.Res.",
+    SCONRES: "S.Con.Res.",
+  };
+  return `${names[bill.type] ?? bill.type} ${bill.number}`;
+}

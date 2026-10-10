@@ -1,0 +1,251 @@
+// The map, in tiles. House wing on the west, Senate wing mirrored on the east,
+// a mall between them, and the White House row across the top. Bills travel
+// from the hoppers at the bottom toward the top.
+
+import type { Chamber, Committee, Member } from "../data/types";
+
+export const TILE = 16;
+export const MAP_W = 176;
+export const MAP_H = 104;
+export const AVENUE_HOUSE = 80; // two tiles wide: 80 and 81
+export const AVENUE_SENATE = 94; // 94 and 95
+const AVENUE_TOP = 12;
+const AVENUE_BOTTOM = 100;
+const CROSSINGS = [12, 45, 99];
+
+export interface Rect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export type SiteStyle =
+  | "committee"
+  | "chamber"
+  | "calendar"
+  | "inbox"
+  | "desk"
+  | "hopper"
+  | "conference"
+  | "whitehouse"
+  | "archive"
+  | "hall"
+  | "bin";
+
+export interface Site {
+  key: string;
+  style: SiteStyle;
+  label: string;
+  short: string;
+  wing: "House" | "Senate" | "Center";
+  rect: Rect;
+  /** Row of tiles in front of the building where bills are stacked. */
+  dock: { x: number; y: number; w: number };
+  /** Street in front of the dock that robots drive along. */
+  lane: number;
+  capacity: number;
+}
+
+export interface Seat {
+  member: Member;
+  x: number; // pixels, feet position
+  y: number;
+}
+
+export interface Layout {
+  sites: Map<string, Site>;
+  chambers: Record<"House" | "Senate", Rect>;
+  conveyors: Record<"House" | "Senate", { from: { x: number; y: number }; to: { x: number; y: number } }>;
+  pool: Rect;
+  lanes: { y: number; x1: number; x2: number }[];
+  avenues: { x: number; y1: number; y2: number }[];
+}
+
+const mirror = (rect: Rect): Rect => ({ ...rect, x: MAP_W - rect.x - rect.w });
+
+function site(
+  key: string,
+  style: SiteStyle,
+  label: string,
+  short: string,
+  wing: Site["wing"],
+  rect: Rect,
+  dock?: { x: number; w: number },
+): Site {
+  const dockRow = { x: dock?.x ?? rect.x, y: rect.y + rect.h, w: dock?.w ?? rect.w };
+  return {
+    key,
+    style,
+    label,
+    short,
+    wing,
+    rect,
+    dock: dockRow,
+    lane: rect.y + rect.h + 1,
+    capacity: Math.max(1, Math.floor((dockRow.w * TILE - 20) / 12)),
+  };
+}
+
+function shortName(name: string): string {
+  return name
+    .replace(/ Committee$/, "")
+    .replace(/^Committee on /, "")
+    .replace(/, and /g, " & ")
+    .replace(/ and /g, " & ");
+}
+
+export function buildLayout(committees: Committee[]): Layout {
+  const sites = new Map<string, Site>();
+  const add = (entry: Site) => sites.set(entry.key, entry);
+
+  // Top row.
+  add(site("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
+  add(site("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
+  add(site("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
+  add(site("vetoed", "bin", "Veto Bin", "Vetoed", "Center", { x: 70, y: 7, w: 6, h: 4 }));
+  add(site("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
+
+  const houseChamber: Rect = { x: 12, y: 17, w: 60, h: 27 };
+  const wings: { chamber: "House" | "Senate"; flip: (r: Rect) => Rect }[] = [
+    { chamber: "House", flip: (r) => r },
+    { chamber: "Senate", flip: mirror },
+  ];
+  const chambers = { House: houseChamber, Senate: mirror(houseChamber) };
+  const conveyors = {} as Layout["conveyors"];
+
+  for (const { chamber, flip } of wings) {
+    const floorDock = flip({ x: 30, y: 0, w: 24, h: 0 });
+    add(site(`floor:${chamber}`, "chamber", `${chamber} Floor`, `${chamber} Floor`, chamber, chambers[chamber], {
+      x: floorDock.x,
+      w: floorDock.w,
+    }));
+    add(site(`other_chamber:${chamber}`, "inbox", `${chamber} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
+    add(site(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 30, y: 48, w: 24, h: 6 })));
+    add(site(`referral_desk:${chamber}`, "desk", `${chamber} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
+    const hopper = flip({ x: 6, y: 93, w: 9, h: 5 });
+    add(site(`hopper:${chamber}`, "hopper", `${chamber} Hopper`, "Hopper", chamber, hopper));
+    const desk = sites.get(`referral_desk:${chamber}`)!.rect;
+    const beltY = hopper.y + 2.5;
+    conveyors[chamber] =
+      chamber === "House"
+        ? { from: { x: hopper.x + hopper.w, y: beltY }, to: { x: desk.x, y: beltY } }
+        : { from: { x: hopper.x, y: beltY }, to: { x: desk.x + desk.w, y: beltY } };
+
+    const own = committees
+      .filter((c) => c.chamber === chamber)
+      .sort((a, b) => a.name.localeCompare(b.name));
+    own.forEach((committee, index) => {
+      const col = index % 6;
+      const row = Math.floor(index / 6);
+      const rect = flip({ x: 5 + 12 * col, y: 59 + 8 * row, w: 10, h: 5 });
+      add(site(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), chamber, rect));
+    });
+  }
+
+  const joint = committees.filter((c) => c.chamber !== "House" && c.chamber !== "Senate" && c.n_bills > 0);
+  joint.forEach((committee, index) => {
+    add(site(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), "Center", {
+      x: 83,
+      y: 67 + 8 * index,
+      w: 10,
+      h: 5,
+    }));
+  });
+
+  // Streets: every site gets a lane from its dock to its avenue; centre sites reach both.
+  const lanes: Layout["lanes"] = [];
+  for (const entry of sites.values()) {
+    const centre = entry.dock.x + entry.dock.w / 2;
+    if (entry.wing === "House") lanes.push({ y: entry.lane, x1: Math.min(centre, entry.dock.x), x2: AVENUE_HOUSE + 2 });
+    else if (entry.wing === "Senate") lanes.push({ y: entry.lane, x1: AVENUE_SENATE, x2: Math.max(centre, entry.dock.x + entry.dock.w) });
+    else lanes.push({ y: entry.lane, x1: Math.min(entry.dock.x, AVENUE_HOUSE), x2: Math.max(entry.dock.x + entry.dock.w, AVENUE_SENATE + 2) });
+  }
+  for (const y of CROSSINGS) lanes.push({ y, x1: AVENUE_HOUSE, x2: AVENUE_SENATE + 2 });
+
+  return {
+    sites,
+    chambers,
+    conveyors,
+    pool: { x: 85, y: 48, w: 6, h: 14 },
+    lanes,
+    avenues: [
+      { x: AVENUE_HOUSE, y1: AVENUE_TOP, y2: AVENUE_BOTTOM },
+      { x: AVENUE_SENATE, y1: AVENUE_TOP, y2: AVENUE_BOTTOM },
+    ],
+  };
+}
+
+/** Which site a location key ("committee:House:hsif00", "calendar:Senate", "law") belongs to. */
+export function siteKeyFor(loc: string | null, sites: Map<string, Site>, fallbackChamber: Chamber = "House"): string | null {
+  if (!loc) return null;
+  const parts = loc.split(":");
+  const kind = parts[0];
+  const chamber = parts.find((part) => part === "House" || part === "Senate") ?? (fallbackChamber || "House");
+  if (kind === "committee") {
+    const code = parts[parts.length - 1];
+    if (sites.has(`committee:${code}`)) return `committee:${code}`;
+    return `referral_desk:${chamber}`;
+  }
+  if (["president", "law", "vetoed", "adopted", "conference"].includes(kind)) return kind;
+  const key = `${kind}:${chamber}`;
+  return sites.has(key) ? key : `referral_desk:${chamber}`;
+}
+
+export function anchorOf(entry: Site): { x: number; y: number } {
+  return { x: (entry.dock.x + entry.dock.w / 2) * TILE, y: (entry.dock.y + 0.5) * TILE };
+}
+
+/** Street route between two sites, in pixels. */
+export function route(from: Site, to: Site): { x: number; y: number }[] {
+  const avenue = (entry: Site, other: Site) => {
+    const wing = entry.wing === "Center" ? (other.wing === "Senate" ? "Senate" : "House") : entry.wing;
+    return (wing === "House" ? AVENUE_HOUSE + 1 : AVENUE_SENATE + 1) * TILE;
+  };
+  const a = anchorOf(from);
+  const b = anchorOf(to);
+  const laneA = (from.lane + 0.5) * TILE;
+  const laneB = (to.lane + 0.5) * TILE;
+  const aveA = avenue(from, to);
+  const aveB = avenue(to, from);
+  const points = [a, { x: a.x, y: laneA }, { x: aveA, y: laneA }];
+  if (aveA !== aveB) {
+    const crossing = CROSSINGS.map((y) => (y + 0.5) * TILE).sort(
+      (p, q) => Math.abs(p - laneA) + Math.abs(p - laneB) - (Math.abs(q - laneA) + Math.abs(q - laneB)),
+    )[0];
+    points.push({ x: aveA, y: crossing }, { x: aveB, y: crossing });
+  }
+  points.push({ x: aveB, y: laneB }, { x: b.x, y: laneB }, b);
+  return points.filter((point, index) => index === 0 || point.x !== points[index - 1].x || point.y !== points[index - 1].y);
+}
+
+/** Seats inside a chamber: two blocks either side of a centre aisle, Democrats on the viewer's left. */
+export function seatMembers(chamber: Rect, members: Member[]): Seat[] {
+  const order = (list: Member[]) =>
+    [...list].sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name));
+  const left = order(members.filter((m) => m.party !== "R"));
+  const right = order(members.filter((m) => m.party === "R"));
+  const inner = { x: (chamber.x + 2) * TILE, y: (chamber.y + 6) * TILE, w: (chamber.w - 4) * TILE, h: (chamber.h - 8) * TILE };
+  const aisle = 3 * TILE;
+  const blockW = (inner.w - aisle) / 2;
+  const biggest = Math.max(left.length, right.length, 1);
+  const rows = Math.max(3, Math.min(13, Math.ceil(Math.sqrt(biggest / 1.9))));
+  const cols = Math.ceil(biggest / rows);
+  const dx = Math.min(blockW / cols, 30);
+  const dy = Math.min(inner.h / rows, 30);
+  const usedW = dx * cols;
+  const seats: Seat[] = [];
+  const place = (list: Member[], blockX: number, towardAisle: 1 | -1) => {
+    list.forEach((member, index) => {
+      const row = Math.floor(index / cols);
+      const col = index % cols;
+      // Fill from the aisle outward so the blocks stay centred.
+      const offset = towardAisle === 1 ? usedW - (col + 0.5) * dx : (col + 0.5) * dx;
+      const bow = Math.pow((col + 0.5) / cols, 2) * 10; // slight amphitheatre curve
+      seats.push({ member, x: Math.round(blockX + offset), y: Math.round(inner.y + (row + 1) * dy - bow) });
+    });
+  };
+  place(left, inner.x + (blockW - usedW), 1);
+  place(right, inner.x + blockW + aisle, -1);
+  return seats;
+}
