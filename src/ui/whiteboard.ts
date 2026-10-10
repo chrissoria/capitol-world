@@ -1,0 +1,352 @@
+// The whiteboard in the Library of Congress: one chart at a time, drawn stroke by
+// stroke with marker pens. The Stats tab chooses which measures are counted (the
+// Congresses, the period, the kind of measure); the board chooses what to plot
+// and how to split it.
+
+import { ordinal } from "../data/types";
+import { el } from "./dom";
+
+export interface BoardRow {
+  congress: number;
+  introduced: string;
+  party: string;
+  stage: number;
+  area: string;
+}
+
+export interface BoardData {
+  ready: boolean;
+  rows: BoardRow[];
+  /** "bills and joint resolutions introduced in the 118th Congress". */
+  caption: string;
+}
+
+export interface BoardSpec {
+  measure: "introduced" | "reported" | "voted" | "passed" | "law";
+  across: "party" | "time" | "congress" | "area";
+  who: "" | "R" | "D" | "I";
+}
+
+const MEASURES: [BoardSpec["measure"], string, number][] = [
+  ["introduced", "How many were introduced", 0],
+  ["reported", "Share that got out of committee", 1],
+  ["voted", "Share that got a floor vote", 2],
+  ["passed", "Share that passed a chamber", 3],
+  ["law", "Share that became law", 5],
+];
+const ACROSS: [BoardSpec["across"], string][] = [
+  ["party", "by sponsor’s party"],
+  ["time", "over time"],
+  ["congress", "by Congress"],
+  ["area", "by policy area"],
+];
+const WHO: [BoardSpec["who"], string][] = [
+  ["", "everyone"],
+  ["D", "Democrats only"],
+  ["R", "Republicans only"],
+  ["I", "Independents only"],
+];
+const PEN = { black: "#2e2a44", R: "#d8433b", D: "#3a6fd8", I: "#3f8f4a", grey: "#8d98a8" };
+const HAND = '"Marker Felt", "Chalkboard SE", "Comic Sans MS", "Segoe Print", cursive';
+
+interface Stroke {
+  points: [number, number][];
+  color: string;
+  width: number;
+  length: number;
+}
+interface Note {
+  text: string;
+  x: number;
+  y: number;
+  size: number;
+  color: string;
+  align: CanvasTextAlign;
+  /** The note is written once this many strokes are down. */
+  after: number;
+}
+interface Bar {
+  label: string;
+  value: number;
+  count: number;
+  color: string;
+}
+
+export function createWhiteboard(root: HTMLElement, onClose: () => void) {
+  const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const pick = <T extends string>(id: string, options: [T, string][]) => {
+    const node = el("select", { id, "aria-label": id });
+    for (const [value, label] of options) node.append(el("option", { value }, label));
+    return node;
+  };
+  const measure = pick("wb-measure", MEASURES.map(([key, label]) => [key, label] as [BoardSpec["measure"], string]));
+  const across = pick("wb-across", ACROSS);
+  const who = pick("wb-who", WHO);
+  const sheet = el("canvas", { role: "img" });
+  const close = el("button", { type: "button", class: "wb-close" }, "← Back to the map");
+  root.replaceChildren(
+    el("div", { class: "wb-frame" },
+      el("div", { class: "wb-bar" }, measure, across, who, close),
+      sheet,
+      el("div", { class: "wb-tray" }, el("i", { class: "R" }), el("i", { class: "D" }), el("i", { class: "I" }), el("i", {}), el("b", {}))),
+  );
+
+  let source: () => BoardData = () => ({ ready: false, rows: [], caption: "" });
+  let frame = 0;
+  let seed = 1;
+  const wobble = () => {
+    seed = (seed * 16807) % 2147483647;
+    return (seed / 2147483647 - 0.5) * 1.6;
+  };
+
+  function plan(width: number, height: number): { strokes: Stroke[]; notes: Note[]; summary: string } {
+    const strokes: Stroke[] = [];
+    const notes: Note[] = [];
+    const line = (points: [number, number][], color: string, w = 2.5) => {
+      // A hand never draws a straight line: break it up and nudge each point.
+      const out: [number, number][] = [];
+      for (let i = 0; i < points.length - 1; i++) {
+        const [ax, ay] = points[i];
+        const [bx, by] = points[i + 1];
+        const steps = Math.max(1, Math.round(Math.hypot(bx - ax, by - ay) / 24));
+        for (let s = i === 0 ? 0 : 1; s <= steps; s++) out.push([ax + ((bx - ax) * s) / steps + wobble(), ay + ((by - ay) * s) / steps + wobble()]);
+      }
+      let length = 0;
+      for (let i = 1; i < out.length; i++) length += Math.hypot(out[i][0] - out[i - 1][0], out[i][1] - out[i - 1][1]);
+      strokes.push({ points: out, color, width: w, length });
+    };
+    const write = (text: string, x: number, y: number, size: number, color = PEN.black, align: CanvasTextAlign = "center") =>
+      notes.push({ text, x, y, size, color, align, after: strokes.length });
+
+    const data = source();
+    const spec: BoardSpec = { measure: measure.value as BoardSpec["measure"], across: across.value as BoardSpec["across"], who: who.value as BoardSpec["who"] };
+    const [, title, stage] = MEASURES.find(([key]) => key === spec.measure)!;
+    const split = ACROSS.find(([key]) => key === spec.across)![1];
+    const only = spec.who && spec.across !== "party" ? `, ${WHO.find(([key]) => key === spec.who)![1]}` : "";
+    const small = Math.max(11, Math.min(15, width / 42));
+    write(`${title} ${split}${only}`, 18, 30, Math.max(15, Math.min(24, width / 26)), PEN.black, "left");
+    write(data.caption, 18, 30 + small * 1.5, small, PEN.grey, "left");
+    if (!data.ready) {
+      write("Counting…", width / 2, height / 2, 22, PEN.grey);
+      return { strokes, notes, summary: "Loading" };
+    }
+    const rows = data.rows.filter((row) => !spec.who || spec.across === "party" || row.party === spec.who);
+    if (!rows.length) {
+      write("Nothing to count here.", width / 2, height / 2, 20, PEN.grey);
+      return { strokes, notes, summary: "No measures match" };
+    }
+    const share = spec.measure !== "introduced";
+    const valueOf = (group: BoardRow[]) => (share ? (group.length ? (100 * group.filter((row) => row.stage >= stage).length) / group.length : 0) : group.length);
+    const show = (value: number) => (share ? `${value > 0 && value < 10 ? value.toFixed(1) : Math.round(value)}%` : Math.round(value).toLocaleString());
+    const left = 56;
+    const right = width - 20;
+    const top = 30 + small * 1.5 + 34;
+    const bottom = height - 44;
+    const penOf = (party: string) => (party === "R" ? PEN.R : party === "D" ? PEN.D : party === "I" ? PEN.I : PEN.black);
+    const groupBy = (key: (row: BoardRow) => string) => {
+      const groups = new Map<string, BoardRow[]>();
+      for (const row of rows) {
+        const k = key(row);
+        if (!k) continue;
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k)!.push(row);
+      }
+      return groups;
+    };
+    const axes = (max: number) => {
+      line([[left, top - 6], [left, bottom], [right, bottom]], PEN.black, 3);
+      for (const part of [0.5, 1]) {
+        const y = bottom - (bottom - top) * part;
+        line([[left - 5, y], [left + 5, y]], PEN.black, 2);
+        write(show(max * part), left - 9, y + 4, small * 0.9, PEN.grey, "right");
+      }
+    };
+    const summary: string[] = [];
+
+    if (spec.across === "time") {
+      const years = [...new Set(rows.map((row) => row.introduced.slice(0, 4)))].sort();
+      const byYear = years.length > 4;
+      const key = (row: BoardRow) => row.introduced.slice(0, byYear ? 4 : 7);
+      const keys = [...new Set(rows.map(key))].filter(Boolean).sort();
+      const series = spec.who ? [spec.who] : ["R", "D"];
+      const points = series.map((party) => {
+        const groups = groupBy((row) => (row.party === party ? key(row) : ""));
+        return keys.map((k) => valueOf(groups.get(k) ?? []));
+      });
+      const max = Math.max(1e-9, ...points.flat()) * 1.1;
+      axes(max);
+      const xOf = (i: number) => left + 14 + ((right - left - 28) * i) / Math.max(1, keys.length - 1);
+      series.forEach((party, s) => {
+        const path = points[s].map((value, i) => [xOf(i), bottom - ((bottom - top) * value) / max] as [number, number]);
+        line(path, penOf(party), 3.5);
+        const [lx, ly] = path[path.length - 1];
+        write(party === "R" ? "Republicans" : party === "D" ? "Democrats" : "Independents", Math.min(lx, right - 4), ly - 10, small, penOf(party), "right");
+        summary.push(`${party}: ${points[s].map((value, i) => `${keys[i]} ${show(value)}`).join(", ")}`);
+      });
+      const every = Math.max(1, Math.ceil(keys.length / Math.max(2, Math.floor((right - left) / 62))));
+      keys.forEach((k, i) => {
+        if (i % every === 0) write(byYear ? k : new Date(`${k}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "2-digit" }), xOf(i), bottom + 18, small * 0.9, PEN.grey);
+      });
+      return { strokes, notes, summary: summary.join(". ") };
+    }
+
+    let bars: Bar[];
+    if (spec.across === "party") {
+      const groups = groupBy((row) => row.party);
+      bars = (["R", "D", "I"] as const)
+        .filter((party) => groups.get(party)?.length)
+        .map((party) => ({ label: party === "R" ? "Republicans" : party === "D" ? "Democrats" : "Independents", value: valueOf(groups.get(party)!), count: groups.get(party)!.length, color: penOf(party) }));
+    } else if (spec.across === "congress") {
+      const groups = groupBy((row) => String(row.congress));
+      bars = [...groups.keys()].sort().map((k) => ({ label: ordinal(Number(k)), value: valueOf(groups.get(k)!), count: groups.get(k)!.length, color: penOf(spec.who) }));
+    } else {
+      const groups = groupBy((row) => row.area);
+      bars = [...groups.entries()]
+        .filter(([, group]) => !share || group.length >= 40) // a share of a handful means little
+        .map(([area, group]) => ({ label: area, value: valueOf(group), count: group.length, color: penOf(spec.who) }))
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 8);
+    }
+    if (!bars.length) {
+      write("Nothing to count here.", width / 2, height / 2, 20, PEN.grey);
+      return { strokes, notes, summary: "No measures match" };
+    }
+    const max = Math.max(1e-9, ...bars.map((bar) => bar.value)) * 1.12;
+    const hatch = (x: number, y: number, w: number, h: number, color: string) => {
+      line([[x, y + h], [x, y], [x + w, y], [x + w, y + h]], color, 3);
+      for (let d = -h + 7; d < w; d += 8) {
+        const sx = Math.max(x, x + d);
+        const ex = Math.min(x + w, x + d + h);
+        line([[sx, y + h - (sx - x - d)], [ex, y + h - (ex - x - d)]], color, 1.6);
+      }
+    };
+    if (spec.across === "area") {
+      // Sideways, so the long names fit.
+      const rowH = (bottom - top + 10) / bars.length;
+      const x0 = Math.min(width * 0.42, 230);
+      line([[x0, top - 8], [x0, bottom + 4]], PEN.black, 3);
+      bars.forEach((bar, i) => {
+        const y = top - 4 + i * rowH;
+        const w = ((right - x0 - 56) * bar.value) / max;
+        write(bar.label.length > 30 ? `${bar.label.slice(0, 29)}…` : bar.label, x0 - 8, y + rowH * 0.55, small * 0.95, PEN.black, "right");
+        line([[x0, y + 3], [x0 + w, y + 3], [x0 + w, y + rowH - 7], [x0, y + rowH - 7]], bar.color, 3);
+        for (let d = 6; d < w; d += 8) line([[x0 + d, y + rowH - 7], [Math.min(x0 + w, x0 + d + rowH - 10), y + 3 + Math.max(0, x0 + d + rowH - 10 - (x0 + w))]], bar.color, 1.6);
+        write(show(bar.value), x0 + w + 8, y + rowH * 0.55, small, bar.color, "left");
+      });
+    } else {
+      axes(max);
+      const slot = (right - left - 16) / bars.length;
+      const barW = Math.min(slot * 0.62, 110);
+      bars.forEach((bar, i) => {
+        const x = left + 8 + slot * i + (slot - barW) / 2;
+        const h = ((bottom - top) * bar.value) / max;
+        hatch(x, bottom - h, barW, h, bar.color);
+        write(show(bar.value), x + barW / 2, bottom - h - 8, small * 1.1, bar.color);
+        write(bar.label, x + barW / 2, bottom + 18, small * 0.95, PEN.black);
+        if (share) write(`of ${bar.count.toLocaleString()}`, x + barW / 2, bottom + 18 + small * 1.1, small * 0.8, PEN.grey);
+      });
+    }
+    return { strokes, notes, summary: bars.map((bar) => `${bar.label}: ${show(bar.value)}`).join(", ") };
+  }
+
+  function draw(animate = true) {
+    cancelAnimationFrame(frame);
+    const box = sheet.getBoundingClientRect();
+    if (box.width < 40 || box.height < 40) return;
+    const ratio = Math.min(2, devicePixelRatio || 1);
+    sheet.width = Math.round(box.width * ratio);
+    sheet.height = Math.round(box.height * ratio);
+    const ctx = sheet.getContext("2d")!;
+    seed = 20261010;
+    const { strokes, notes, summary } = plan(box.width, box.height);
+    sheet.setAttribute("aria-label", `${notes[0]?.text ?? "Chart"}. ${summary}`);
+    const total = strokes.reduce((sum, stroke) => sum + stroke.length, 0);
+    const started = performance.now();
+    const duration = animate && !still ? Math.min(2200, 500 + total * 0.35) : 0;
+    const paint = (now: number) => {
+      const reach = duration ? Math.min(1, (now - started) / duration) * total : total;
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, box.width, box.height);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      let used = 0;
+      let done = 0;
+      for (const stroke of strokes) {
+        const budget = reach - used;
+        if (budget <= 0) break;
+        ctx.strokeStyle = stroke.color;
+        ctx.lineWidth = stroke.width;
+        ctx.beginPath();
+        ctx.moveTo(stroke.points[0][0], stroke.points[0][1]);
+        let run = 0;
+        for (let i = 1; i < stroke.points.length; i++) {
+          const [ax, ay] = stroke.points[i - 1];
+          const [bx, by] = stroke.points[i];
+          const piece = Math.hypot(bx - ax, by - ay);
+          if (run + piece > budget) {
+            const part = (budget - run) / piece;
+            ctx.lineTo(ax + (bx - ax) * part, ay + (by - ay) * part);
+            break;
+          }
+          ctx.lineTo(bx, by);
+          run += piece;
+        }
+        ctx.stroke();
+        used += stroke.length;
+        if (used <= reach) done++;
+      }
+      for (const note of notes) {
+        if (note.after > done) continue;
+        ctx.font = `${note.size}px ${HAND}`;
+        ctx.textAlign = note.align;
+        ctx.fillStyle = note.color;
+        ctx.fillText(note.text, note.x, note.y);
+      }
+      if (reach < total) frame = requestAnimationFrame(paint);
+    };
+    paint(started);
+  }
+
+  for (const node of [measure, across, who]) node.addEventListener("change", () => draw());
+  new ResizeObserver(() => !root.hidden && draw(false)).observe(sheet);
+  const shut = () => {
+    if (root.hidden) return;
+    root.hidden = true;
+    cancelAnimationFrame(frame);
+    onClose();
+  };
+  close.addEventListener("click", shut);
+  // Escape closes the board before anything else hears it. The listener goes when the page is rebuilt.
+  const onKey = (event: KeyboardEvent) => {
+    if (!root.isConnected) return document.removeEventListener("keydown", onKey, true);
+    if (event.key !== "Escape" || root.hidden) return;
+    event.stopPropagation();
+    shut();
+  };
+  document.addEventListener("keydown", onKey, true);
+
+  return {
+    get isOpen() {
+      return !root.hidden;
+    },
+    /** Where the board gets the measures to count: the Stats tab's current choice. */
+    setSource(next: () => BoardData) {
+      source = next;
+    },
+    /** Show the board, optionally with a particular chart. */
+    open(spec: Partial<BoardSpec> = {}) {
+      if (spec.measure) measure.value = spec.measure;
+      if (spec.across) across.value = spec.across;
+      if (spec.who !== undefined) who.value = spec.who;
+      root.hidden = false;
+      draw();
+    },
+    /** Draw again because the measures being counted have changed. */
+    refresh() {
+      if (!root.hidden) draw();
+    },
+    close: shut,
+  };
+}
+
+export type Whiteboard = ReturnType<typeof createWhiteboard>;

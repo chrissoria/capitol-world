@@ -330,6 +330,14 @@ export class WorldScene extends Phaser.Scene {
     this.flyTo((MAP_W * TILE) / 2, (MAP_H * TILE) / 2, zoom, duration);
   }
 
+  /** Bring a building into view on the map, without selecting it. */
+  lookAt(siteKey: string) {
+    const site = this.layout.sites.get(siteKey);
+    if (!site) return;
+    if (this.inside) this.leave();
+    this.flyTo((site.rect.x + site.rect.w / 2) * TILE, (site.rect.y + site.rect.h / 2) * TILE, 2);
+  }
+
   private flyTo(x: number, y: number, zoom: number, duration = 600) {
     const camera = this.cameras.main;
     if (duration <= 0) {

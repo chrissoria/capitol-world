@@ -95,6 +95,8 @@ function roofColors(entry: Site): [string, string] {
       return [PALETTE.slate, PALETTE.slateDark];
     case "memorial":
       return [PALETTE.steel, PALETTE.steelDark];
+    case "library":
+      return ["#8cc0aa", "#64997f"]; // weathered copper
     default:
       if (entry.wing === "Senate") return [PALETTE.senate, PALETTE.senateDark];
       if (entry.wing === "House") return [PALETTE.house, PALETTE.houseDark];
@@ -124,7 +126,7 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     framed(ctx, wx, wallTop, 10, 9, PALETTE.window);
     box(ctx, wx + 4, wallTop + 1, 1, 7, PALETTE.ink);
   }
-  if (entry.style === "archive" || entry.style === "hall" || entry.style === "memorial") {
+  if (entry.style === "archive" || entry.style === "hall" || entry.style === "memorial" || entry.style === "library") {
     for (let cx = x + 6; cx < x + w - 6; cx += 14) {
       if (cx + 4 > doorX - 2 && cx < doorX + doorW + 2) continue;
       framed(ctx, cx, y + roofH - 2, 5, h - roofH + 2, PALETTE.white);
@@ -372,6 +374,19 @@ function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   }
 }
 
+/** A copper-green roof and dome with the torch of learning on top, after the Jefferson Building. */
+function drawLibrary(ctx: CanvasRenderingContext2D, entry: Site) {
+  drawRoofed(ctx, entry);
+  const { x, y, w } = scale(entry.rect);
+  const mid = x + Math.round(w / 2);
+  disc(ctx, mid, y + 4, 22, PALETTE.ink, -22, 4);
+  disc(ctx, mid, y + 4, 20, "#8cc0aa", -20, 3);
+  for (const rib of [-12, -4, 4, 12]) box(ctx, mid + rib - 1, y - 12 + Math.abs(rib) / 2, 1, 14 - Math.abs(rib) / 2, "#64997f");
+  framed(ctx, mid - 3, y - 24, 6, 8, PALETTE.gold);
+  box(ctx, mid - 2, y - 30, 4, 6, PALETTE.orange);
+  box(ctx, mid - 1, y - 33, 2, 4, PALETTE.yellow);
+}
+
 /** A grey hall with a flame that is kept burning and a wreath by the door. */
 function drawMemorial(ctx: CanvasRenderingContext2D, entry: Site) {
   drawRoofed(ctx, entry);
@@ -565,6 +580,7 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
     else if (entry.style === "conference") drawConference(ctx, entry);
     else if (entry.style === "whitehouse") drawWhiteHouse(ctx, entry);
     else if (entry.style === "memorial") drawMemorial(ctx, entry);
+    else if (entry.style === "library") drawLibrary(ctx, entry);
     else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }

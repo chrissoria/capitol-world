@@ -140,6 +140,13 @@ const SHARED: Record<string, Note> = {
     ],
     here: "Bills that became law in the last 30 days. The Law Archive stands in for the National Archives; it is not a real building.",
   },
+  library: {
+    role: [
+      "The Library of Congress runs Congress.gov, the public record of every bill, action and vote, which is where everything on this map comes from. Its Congressional Research Service works only for Congress and writes the official summary of each bill.",
+      "The counts on the whiteboard are this project’s own tallies of that record. They are not official statistics.",
+    ],
+    here: "No bills are kept here. Click the building, or the Stats tab, to open the whiteboard.",
+  },
   memorial: {
     role: [
       "Most bills never become law. A few are stopped by an event: the President vetoes one and Congress does not override it, or a chamber votes one down. Far more simply run out of time. A bill that has not become law when a Congress ends, every two years, dies with it and has to be introduced again from the start.",

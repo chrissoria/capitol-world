@@ -5,6 +5,7 @@
 import { loadCongressLine, loadSearchOf, type CongressEntry } from "../data/load";
 import { ordinal, type SearchIndex, type World } from "../data/types";
 import { add, el, niceDate, put } from "./dom";
+import type { BoardSpec, Whiteboard } from "./whiteboard";
 
 const PERIODS: [string, string, number][] = [
   ["day", "The latest day", 1],
@@ -92,7 +93,7 @@ function toRows(data: SearchIndex, congress: number): Row[] {
   });
 }
 
-export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void) {
+export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void, board: Whiteboard) {
   const members = new Map(world.members.map((member) => [member.id, member]));
   const select = (id: string, options: [string, string][], value: string) => {
     const node = el("select", { id });
@@ -133,6 +134,26 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
   let state: "loading" | "ready" | "failed" = "loading";
   let opened = false;
   let loads = 0;
+  // What the whiteboard draws from: the measures the choices above leave in.
+  let counted: Row[] = [];
+  let caption = "";
+  board.setSource(() => ({ ready: state === "ready", rows: counted, caption }));
+
+  /** Make a figure a button that draws its chart on the whiteboard. */
+  const drawable = <T extends HTMLElement>(node: T, spec: Partial<BoardSpec>): T => {
+    node.classList.add("pick");
+    node.tabIndex = 0;
+    node.setAttribute("role", "button");
+    node.title = "Draw this on the whiteboard";
+    const go = () => board.open(spec);
+    node.addEventListener("click", go);
+    node.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      go();
+    });
+    return node;
+  };
 
   const span = () => chosenLine.length > 0 && chosenLine.some((entry) => entry.live);
   const single = () => chosenLine.length === 1;
@@ -170,15 +191,15 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     render();
   }
 
-  function bar(label: string, value: number, whole: number, note = "") {
+  function bar(label: string, value: number, whole: number, measure: BoardSpec["measure"], note = "") {
     const width = whole ? Math.max(value > 0 ? 1 : 0, (value / whole) * 100) : 0;
-    return el(
+    return drawable(el(
       "li",
       {},
       el("div", { class: "bar-row" }, el("span", {}, label), el("span", { class: "count" }, value.toLocaleString())),
       el("div", { class: "meter" }, el("i", { style: `width:${width}%` })),
       el("div", { class: "row-sub" }, `${percent(value, whole)} of those introduced${note}`),
-    );
+    ), { measure, across: "party", who: "" });
   }
 
   function chart(chosen: Row[], since: string, days: number, last: string) {
@@ -213,16 +234,22 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       }
       return column;
     });
-    return el(
+    return drawable(el(
       "div",
       {},
       el("h3", {}, `Introduced each ${unit}`),
       el("div", { class: "chart", role: "img", "aria-label": `Bar chart of measures introduced each ${unit}, coloured by the sponsor's party` }, ...columns),
       el("div", { class: "chart-axis" }, el("span", {}, name(keys[0])), el("span", {}, `tallest bar: ${tallest.toLocaleString()}`), el("span", {}, name(keys[keys.length - 1]))),
-    );
+    ), { measure: "introduced", across: "time", who: "" });
   }
 
   function render() {
+    paint();
+    board.refresh();
+  }
+
+  function paint() {
+    counted = [];
     if (state === "failed") return put(body, el("p", { class: "note" }, "The statistics could not be loaded."));
     if (state === "loading") return put(body, el("p", { class: "note" }, chosenLine.length > 1 ? `Loading every bill of ${chosenLine.length} Congresses…` : "Loading every bill of this Congress…"));
     if (!rows.length) {
@@ -240,6 +267,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
         (kind.value === "all" || row.law === (kind.value === "law")) &&
         (!chamber.value || row.house === (chamber.value === "House")),
     );
+    counted = chosen;
     const all = emptyTally();
     const byParty = new Map(PARTIES.map(([key]) => [key, emptyTally()]));
     const byCongress = new Map(chosenLine.map((entry) => [entry.congress, emptyTally()]));
@@ -268,9 +296,10 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     const passedLabel = kind.value === "res" ? "Agreed to by a chamber" : "Passed at least one chamber";
     const votedNote = all.voted ? ` · ${percent(all.passed, all.voted)} of those that got a floor vote` : "";
 
+    caption = `${noun} introduced ${when}${chamber.value ? ` in the ${chamber.value}` : ""}`;
     const partyRows = PARTIES.filter(([key]) => byParty.get(key)!.introduced).map(([key, name]) => {
       const tally = byParty.get(key)!;
-      return el(
+      return drawable(el(
         "li",
         {},
         el("div", { class: "bar-row" }, el("span", {}, el("span", { class: `pin ${key}` }), name), el("span", { class: "count" }, tally.introduced.toLocaleString())),
@@ -282,7 +311,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
           canBecomeLaw ? ` · law ${percent(tally.law, tally.introduced)}` : "",
           tally.voted ? `. Of those voted on, ${percent(tally.passed, tally.voted)} passed.` : ".",
         ),
-      );
+      ), { measure: "introduced", across: "time", who: key as BoardSpec["who"] });
     });
 
     // One row per Congress, so they can be compared.
@@ -291,7 +320,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       ? []
       : [...chosenLine].reverse().map((entry) => {
           const tally = byCongress.get(entry.congress)!;
-          return el(
+          return drawable(el(
             "li",
             {},
             el("div", { class: "bar-row" }, el("span", {}, `${ordinal(entry.congress)} · ${yearsOf(entry)}`), el("span", { class: "count" }, tally.introduced.toLocaleString())),
@@ -303,7 +332,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
               canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law (${percent(tally.law, tally.introduced)})` : "",
               entry.live ? " · still under way" : "",
             ),
-          );
+          ), { measure: canBecomeLaw ? "law" : "passed", across: "congress", who: "" });
         });
 
     const sponsorRows = [...bySponsor.entries()]
@@ -324,22 +353,23 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     const areaRows = [...byArea.entries()]
       .sort((a, b) => b[1] - a[1])
       .slice(0, 6)
-      .map(([area, n]) => el("li", {}, el("div", { class: "bar-row" }, el("span", {}, area), el("span", { class: "count" }, n.toLocaleString()))));
+      .map(([area, n]) => drawable(el("li", {}, el("div", { class: "bar-row" }, el("span", {}, area), el("span", { class: "count" }, n.toLocaleString()))), { measure: "introduced", across: "area", who: "" }));
 
     put(
       body,
-      el("div", { class: "stat-big" }, all.introduced.toLocaleString()),
-      el("p", {}, `${noun} introduced ${when}${chamber.value ? ` in the ${chamber.value}` : ""}.`),
+      el("p", { class: "note" }, "Pick any figure to draw it on the whiteboard."),
+      drawable(el("div", { class: "stat-big" }, all.introduced.toLocaleString()), { measure: "introduced", across: "party", who: "" }),
+      el("p", {}, `${caption}.`),
       all.introduced ? el("h3", {}, live ? "How far they have got" : "How far they got") : null,
       all.introduced
         ? el(
             "ul",
             { class: "list" },
-            bar("Out of committee", all.reported, all.introduced),
-            bar("Got a floor vote", all.voted, all.introduced),
-            bar(passedLabel, all.passed, all.introduced, votedNote),
-            canBecomeLaw ? bar("Passed both chambers", all.both, all.introduced) : null,
-            canBecomeLaw ? bar("Became law", all.law, all.introduced) : null,
+            bar("Out of committee", all.reported, all.introduced, "reported"),
+            bar("Got a floor vote", all.voted, all.introduced, "voted"),
+            bar(passedLabel, all.passed, all.introduced, "passed", votedNote),
+            canBecomeLaw ? bar("Passed both chambers", all.both, all.introduced, "passed") : null,
+            canBecomeLaw ? bar("Became law", all.law, all.introduced, "law") : null,
           )
         : null,
       all.introduced

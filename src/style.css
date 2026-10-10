@@ -963,3 +963,100 @@ label.check input {
   width: auto;
   margin: 0;
 }
+
+/* The whiteboard in the Library of Congress. */
+#whiteboard {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  padding: 12px;
+  background: #cfc3a0 repeating-linear-gradient(90deg, rgba(46, 42, 68, 0.06) 0 2px, transparent 2px 28px);
+}
+
+#whiteboard[hidden] {
+  display: none;
+}
+
+.wb-frame {
+  position: relative;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  background: #fdfdfb;
+  border: 6px solid var(--ink);
+  outline: 4px solid #b9c0cc;
+  outline-offset: -10px;
+  box-shadow: 8px 8px 0 rgba(46, 42, 68, 0.45);
+}
+
+.wb-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 4px;
+}
+
+.wb-bar select {
+  width: auto;
+  max-width: 100%;
+  margin: 0;
+  padding: 3px 6px;
+  font-size: 12px;
+  background: #fff7c9;
+  border: 2px solid var(--ink);
+  border-radius: 2px;
+  box-shadow: 2px 2px 0 rgba(46, 42, 68, 0.3);
+}
+
+.wb-close {
+  margin-left: auto;
+}
+
+.wb-frame canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+}
+
+.wb-tray {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: 12px;
+  margin: 0 10px 10px;
+  padding: 0 12px;
+  background: #b9c0cc;
+  border: 2px solid var(--ink);
+}
+
+.wb-tray i {
+  width: 30px;
+  height: 6px;
+  background: var(--ink);
+  border-radius: 1px;
+}
+
+.wb-tray i.R { background: var(--party-r, #d8433b); }
+.wb-tray i.D { background: var(--party-d, #3a6fd8); }
+.wb-tray i.I { background: #3f8f4a; }
+
+.wb-tray b {
+  width: 34px;
+  height: 8px;
+  margin-left: auto;
+  background: #6b4a2f;
+  border: 2px solid var(--ink);
+}
+
+/* A figure in the Stats tab that can be drawn on the whiteboard. */
+.pick {
+  cursor: pointer;
+}
+
+.pick:hover,
+.pick:focus-visible {
+  background: rgba(224, 170, 62, 0.22);
+  outline: none;
+}

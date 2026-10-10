@@ -37,7 +37,10 @@ it stood on the last day; in the current one, a year without action, after
 which 96 in 100 bills of the last six Congresses never moved again.
 
 Search looks through every Congress, and the Stats tab takes any run of them,
-from one Congress to all of them. A few small objects on the lawns (a ballot
+from one Congress to all of them. The Stats tab is also a building: the Library
+of Congress, where a whiteboard draws any of its figures as a chart, stroke by
+stroke, and the chart can be changed on the board (by party, over time, by
+Congress, by policy area). A few small objects on the lawns (a ballot
 box, a shutdown barricade, a server rack) place each Congress in its years;
 they are scenery with a caption, listed in `src/world/era.ts`.
 
@@ -89,6 +92,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/ui/roster.ts` the Roster tab: every member, where their figure is, and a click to go there
 - `src/ui/explain.ts` the folded "What happens here?" notes on each building's part in the process
 - `src/ui/stats.ts` the Stats tab: introductions by period, party and member, and how far they got
+- `src/ui/whiteboard.ts` the whiteboard in the Library of Congress: charts drawn with marker strokes
 - `src/audio/music.ts` chiptune music synthesised with Web Audio (no audio files)
 
 The music is two public-domain tunes ("Yankee Doodle" and "America the

@@ -152,6 +152,7 @@ async function main() {
         committee: committeeOf,
         stage: (code, meetingId) => scene.stage(code, meetingId),
         whereIs: (id) => scene.whereIs(id),
+        lookAt: (key) => scene.lookAt(key),
       });
       replayButton.hidden = !scene.hasEvents;
       const initial = targetFromHash();

@@ -31,7 +31,8 @@ export type SiteStyle =
   | "whitehouse"
   | "archive"
   | "hall"
-  | "memorial";
+  | "memorial"
+  | "library";
 
 export interface Site {
   key: string;
@@ -97,6 +98,7 @@ export function buildLayout(committees: Committee[]): Layout {
   add(site("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
   add(site("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
   add(site("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
+  add(site("library", "library", "Library of Congress", "Library", "Center", { x: 30, y: 3, w: 16, h: 8 }));
   add(site("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", { x: 130, y: 3, w: 16, h: 8 }));
   add(site("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
 

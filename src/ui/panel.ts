@@ -11,6 +11,7 @@ import { add, el, niceDate, put } from "./dom";
 import { describeFinished, explainSite, explainStage } from "./explain";
 import { createRoster } from "./roster";
 import { createStats } from "./stats";
+import { createWhiteboard } from "./whiteboard";
 
 export const STAGES: Record<string, string> = {
   hopper: "Just introduced",
@@ -58,6 +59,8 @@ export interface PanelActions {
   stage(code: string, meetingId: string): void;
   /** Where a member's figure is in the world right now, in a few words. */
   whereIs(memberId: string): string;
+  /** Bring a building into view on the map, without selecting it. */
+  lookAt(siteKey: string): void;
 }
 
 function congressUrl(id: string): string {
@@ -71,6 +74,8 @@ export function createPanel(world: World, actions: PanelActions) {
   const congressName = `${ordinal(world.congress)} Congress${world.years ? ` (${world.years[0]}–${world.years[1]})` : ""}`;
   const active = final ? "" : "active ";
   describeFinished(final);
+  // The whiteboard in the Library of Congress, where the Stats tab's figures are drawn as charts.
+  const board = createWhiteboard(document.getElementById("whiteboard")!, () => {});
   const members = new Map(world.members.map((member) => [member.id, member]));
   const bills = new Map(world.bills.map((bill) => [bill.id, bill]));
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("#tabs button")];
@@ -92,7 +97,14 @@ export function createPanel(world: World, actions: PanelActions) {
     activeTab = name;
     for (const tab of tabs) tab.setAttribute("aria-selected", String(tab.dataset.tab === name));
     for (const [key, section] of Object.entries(sections)) section.hidden = key !== name;
-    if (name === "stats") stats.open();
+    if (name === "stats") {
+      // The Stats tab is the Library of Congress: go there and open the whiteboard.
+      stats.open();
+      if (!board.isOpen) {
+        actions.lookAt("library");
+        board.open();
+      }
+    } else board.close();
     if (name === "roster") roster.open();
   }
   for (const tab of tabs) tab.addEventListener("click", () => showTab(tab.dataset.tab as keyof typeof sections));
@@ -651,7 +663,7 @@ export function createPanel(world: World, actions: PanelActions) {
   );
   summary.textContent = "Nothing is filtered.";
 
-  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }));
+  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board);
 
   const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }));
 
@@ -693,6 +705,8 @@ export function createPanel(world: World, actions: PanelActions) {
   showOverview();
   return {
     show(target: Target | null) {
+      // The library has no bills: clicking it opens the Stats tab and the whiteboard.
+      if (target?.type === "site" && actions.siteByKey(target.id)?.style === "library") return showTab("stats");
       if (target?.type === "bill" && !bills.has(target.id)) return openOutside(target.id);
       visit(target ? { kind: "target", target } : { kind: "overview" });
       if (!target) showOverview();
