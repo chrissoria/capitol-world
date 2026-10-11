@@ -5,8 +5,9 @@ import { ordinal } from "./data/types";
 import { createCalendar } from "./ui/calendar";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
-import { WORLDS, worldInAddress } from "./worlds";
-import type { WorldKey } from "./worlds/types";
+import { openAtlas } from "./usa";
+import { WORLDS, atlasInAddress, worldInAddress } from "./worlds";
+import type { Destination } from "./worlds/types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -28,40 +29,68 @@ const untouched = { app: $("app").cloneNode(true), about: $("about").cloneNode(t
 // The world on show: Capitol Hill, or another named in the address.
 let def = worldInAddress();
 useProvider(def.provider);
+// The map of the United States is not a world: it has no items of its own, and borrows the Capitol's members.
+let atlas = atlasInAddress();
+if (atlas) setCongress(null);
 let life = new AbortController(); // ends the listeners of the Congress on show
-let showing: WorldScene | undefined;
+let showing: { destroy(): void } | undefined;
 let opened = 0;
 
-/** Show another Congress (null for the current one) in place. */
-function switchTo(congress: number | null, address: "push" | "replace" | "keep" = "push", world: WorldKey = def.key) {
+/** Show another Congress (null for the current one) in place, or go somewhere else: another world, or the map of the United States. */
+function switchTo(congress: number | null, address: "push" | "replace" | "keep" = "push", world: Destination = atlas ? "usa" : def.key, hash = "") {
   life.abort();
   life = new AbortController();
-  showing?.game.destroy(true);
+  showing?.destroy();
   showing = undefined;
   $("app").replaceWith(untouched.app.cloneNode(true));
   $("about").replaceWith(untouched.about.cloneNode(true));
-  if (world !== def.key) {
-    def = WORLDS[world];
+  atlas = world === "usa";
+  const next = world === "usa" ? WORLDS.capitol : WORLDS[world];
+  if (next.key !== def.key) {
+    def = next;
     useProvider(def.provider);
   }
+  if (atlas) congress = null;
   setCongress(congress);
   if (address !== "keep") {
     const query = new URLSearchParams(location.search);
     for (const name of ["congress", "term", "world"]) query.delete(name);
-    if (def.key !== "capitol") query.set("world", def.key);
+    if (atlas) query.set("world", "usa");
+    else if (def.key !== "capitol") query.set("world", def.key);
     if (congress !== null) query.set(def.periodParam, String(congress));
     const search = query.toString();
-    const next = `${location.pathname}${search ? `?${search}` : ""}${address === "replace" ? location.hash : ""}`;
+    const next = `${location.pathname}${search ? `?${search}` : ""}${address === "replace" ? location.hash : hash}`;
     history[address === "push" ? "pushState" : "replaceState"](null, "", next);
   }
   music.setTrack("map");
-  void main();
+  void (atlas ? showAtlas() : main());
 }
 
 // Back and forward across a change of Congress.
 addEventListener("popstate", () => {
-  if (worldInAddress().key !== def.key || congressInAddress() !== archived) switchTo(congressInAddress(), "keep", worldInAddress().key);
+  if (atlasInAddress() !== atlas || worldInAddress().key !== def.key || congressInAddress() !== archived) switchTo(congressInAddress(), "keep", atlasInAddress() ? "usa" : worldInAddress().key);
 });
+
+/** The music button, on a page that has just been built. */
+function wireMusic() {
+  const musicButton = $<HTMLButtonElement>("music");
+  const showMusic = () => {
+    musicButton.textContent = music.enabled ? "♪ On" : "♪ Off";
+    musicButton.setAttribute("aria-pressed", String(music.enabled));
+    musicButton.setAttribute("aria-label", music.enabled ? "Music is on. Turn it off" : "Music is off. Turn it on");
+  };
+  showMusic();
+  musicButton.addEventListener("click", () => {
+    music.setEnabled(!music.enabled);
+    showMusic();
+  });
+}
+
+/** The map of the United States, from which the worlds are reached. */
+function showAtlas() {
+  wireMusic();
+  showing = openAtlas({ signal: life.signal, travel: (world, member) => switchTo(null, "push", world, member ? `#member=${member}` : "") });
+}
 
 async function main() {
   const turn = ++opened;
@@ -108,17 +137,7 @@ async function main() {
   const storyButton = $<HTMLButtonElement>("replay-all"); // the whole period, in a world that can replay it
   storyButton.textContent = def.words.replayAll ?? "";
   const backButton = $<HTMLButtonElement>("back");
-  const musicButton = $<HTMLButtonElement>("music");
-  const showMusic = () => {
-    musicButton.textContent = music.enabled ? "♪ On" : "♪ Off";
-    musicButton.setAttribute("aria-pressed", String(music.enabled));
-    musicButton.setAttribute("aria-label", music.enabled ? "Music is on. Turn it off" : "Music is off. Turn it on");
-  };
-  showMusic();
-  musicButton.addEventListener("click", () => {
-    music.setEnabled(!music.enabled);
-    showMusic();
-  });
+  wireMusic();
   const clock = $("clock");
   let current: Target | null = null;
   let panel: ReturnType<typeof createPanel> | undefined;
@@ -147,7 +166,7 @@ async function main() {
       calendar.open(code);
     },
     onTravel(to) {
-      switchTo(null, "push", to as WorldKey);
+      switchTo(null, "push", to as Destination);
     },
     onPlace(inside) {
       calendar.close();
@@ -172,7 +191,7 @@ async function main() {
         whereIs: (id) => scene.whereIs(id),
         lookAt: (key) => scene.lookAt(key),
         learning: (open) => music.setTrack(open ? "library" : "map"),
-        travel: (to) => switchTo(null, "push", to as WorldKey),
+        travel: (to) => switchTo(null, "push", to as Destination),
         mapView: () => (scene.textures.exists("ground") ? (scene.textures.get("ground").getSourceImage() as HTMLCanvasElement) : null),
       }, def);
       replayButton.hidden = !scene.hasEvents;
@@ -183,7 +202,7 @@ async function main() {
     },
   }, def.layout);
 
-  showing = scene;
+  showing = { destroy: () => scene.game.destroy(true) };
   if (import.meta.env.DEV) (window as unknown as { scene: WorldScene }).scene = scene;
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
   storyButton.addEventListener("click", () => scene.replay(true));
@@ -203,4 +222,4 @@ async function main() {
   }, { signal });
 }
 
-void main();
+void (atlas ? showAtlas() : main());

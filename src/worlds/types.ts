@@ -19,6 +19,8 @@ import type { BoardConfig } from "../ui/whiteboard";
 import type { Layout, Site } from "../world/layout";
 
 export type WorldKey = "capitol" | "whitehouse" | "court";
+/** Somewhere a door can lead: a world, or the map of the United States (../usa), which is not one. */
+export type Destination = WorldKey | "usa";
 
 export interface Words {
   /** One item and several: "bill", "bills". */
@@ -82,5 +84,5 @@ export interface WorldDef {
   /** Anything more to say about one item, as lines for the inspector. */
   itemNotes?(bill: Bill, world: World): { heading: string; rows: { text: string; target?: string }[] }[];
   /** Where a click on a building of style "gate" leads. */
-  doors: { site: string; to: WorldKey; label: string }[];
+  doors: { site: string; to: Destination; label: string }[];
 }

@@ -46,7 +46,7 @@ they are scenery with a caption, listed in `src/world/era.ts`.
 
 ## Worlds
 
-Capitol Hill is one of three maps. The White House world is about executive
+Capitol Hill is one of three worlds. The White House world is about executive
 orders. Click the White House to go inside: the President at the desk in the
 Oval Office with the orders on it, the cabinet at its table, the senior staff at
 their desks, the mess and the briefing room. The orders are listed by the
@@ -79,6 +79,36 @@ whiteboard can plot. The scene, panel, search, statistics, whiteboard and travel
 are shared, so a new world is a data adapter, a layout and a vocabulary.
 
 Live at <https://christophersoria.com/capitol-world/>.
+
+## The map of the United States
+
+The worlds are reached from a map of the country (`?world=usa`), and the board
+on the lawn left of the White House leads out to it. It is not a world: nothing
+on it moves, and it has no data of its own beyond who each place sends to
+Congress, which it reads from Capitol World's file.
+
+- Click a state to open that state's own map, with its counties; click a
+  county for its card. A county's name shows beside the pointer.
+- A star marks each capital. A gold one leads straight into a world, and so far
+  only Washington's does, into Capitol World. A white one opens the capital's
+  card, which says its world is not built yet.
+- The District and the five territories have no map of their own; a click
+  opens their card.
+- The address can name a state (`#state=CA`), a county by its Census code
+  (`#county=06037`) or a capital (`#capital=CA`).
+
+To give a state capitol or a county a world, build the world as the others are
+built and name it in `src/usa/states.ts`: in the state's `world`, or in
+`COUNTY_WORLDS`.
+
+The shapes come from the Census Bureau's cartographic boundary files, by way of
+[us-atlas](https://github.com/topojson/us-atlas) (ISC licence), turned into
+grids of squares by `tools/make_usmap.mjs`: the country in
+`src/usa/shapes.ts`, and each state in `public/usa/<code>.json`, fetched when
+the state is opened. The outlines are from before 2019, so Connecticut has its
+eight counties rather than the planning regions that replaced them, and
+Alaska's Valdez-Cordova census area, since divided in two, is whole. The
+territories are hand-drawn islands in a box, not to scale or in place.
 
 ## Data
 
@@ -121,6 +151,8 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 ## Layout
 
 - `src/worlds/` one definition per world (Capitol Hill, the White House, the Supreme Court) and the shape they share
+- `src/usa/` the map of the United States and of each state: places, grids, drawing, scene and panel
+- `tools/make_usmap.mjs` builds those grids from the Census outlines
 - `src/data/` snapshot types and loading
 - `src/world/layout.ts` the map: sites, streets and routes
 - `src/world/era.ts` the signs of the times drawn on the lawns of each Congress

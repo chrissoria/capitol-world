@@ -17,6 +17,7 @@ export const capitol: WorldDef = {
   doors: [
     { site: "president", to: "whitehouse", label: "Go to the White House →" },
     { site: "court", to: "court", label: "Go to the Supreme Court →" },
+    { site: "gate-usa", to: "usa", label: "Go to the map of the United States →" },
   ],
   words: {
     item: "bill",

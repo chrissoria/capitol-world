@@ -2,6 +2,7 @@
 // nothing to license and one consistent style.
 
 import type { Member } from "../data/types";
+import { drawSmallNation } from "../usa/art";
 import { AVENUE_BOTTOM, AVENUE_HOUSE, AVENUE_SENATE, AVENUE_TOP, MAP_H, MAP_W, TILE, type Layout, type Rect, type Site } from "./layout";
 
 export const PALETTE = {
@@ -477,6 +478,38 @@ function drawGate(ctx: CanvasRenderingContext2D, entry: Site) {
   for (const px of [-16, 12]) framed(ctx, mid + px, y + 6, 4, 8, PALETTE.gold);
 }
 
+/** The way to the map of the United States: that map painted on a board, over a gateway in a hedge. */
+function drawAtlas(ctx: CanvasRenderingContext2D, entry: Site) {
+  const { x, y, w, h } = scale(entry.rect);
+  const mid = x + Math.round(w / 2);
+  const hedge = y + h - 22;
+  box(ctx, x, hedge, w, 22, PALETTE.ink);
+  box(ctx, x + 1, hedge + 1, w - 2, 20, "#3f8f4a");
+  for (let n = 0, lx = x + 4; lx < x + w - 4; lx += 7, n++) box(ctx, lx, hedge + 4 + (n % 2) * 5, 3, 3, "#58a85f");
+  // The board, on two posts, with a flag at one corner.
+  const mapW = 232;
+  const mapH = 137;
+  const left = mid - mapW / 2 - 6;
+  for (const post of [left + 14, left + mapW - 6]) box(ctx, post, y + mapH + 12, 4, hedge - (y + mapH + 12), PALETTE.woodDark);
+  framed(ctx, left, y, mapW + 12, mapH + 12, PALETTE.wood);
+  box(ctx, left + 2, y + 2, mapW + 8, 1, "#d3a070");
+  box(ctx, left + 5, y + 5, mapW + 2, mapH + 2, PALETTE.ink);
+  drawSmallNation(ctx, left + 6, y + 6, mapW, mapH);
+  const pole = left + mapW + 9;
+  box(ctx, pole, y - 22, 2, 24, PALETTE.ink);
+  framed(ctx, pole + 2, y - 22, 18, 12, PALETTE.white);
+  for (const stripe of [1, 5, 9]) box(ctx, pole + 3, y - 22 + stripe, 16, 2, PALETTE.partyR);
+  box(ctx, pole + 3, y - 21, 7, 6, PALETTE.partyD);
+  // The gateway under it, with the road running through.
+  framed(ctx, mid - 17, y + h - 32, 34, 32, PALETTE.stone);
+  box(ctx, mid - 10, y + h - 22, 20, 22, PALETTE.path);
+  box(ctx, mid - 11, y + h - 23, 22, 1, PALETTE.ink);
+  box(ctx, mid - 11, y + h - 23, 1, 23, PALETTE.ink);
+  box(ctx, mid + 10, y + h - 23, 1, 23, PALETTE.ink);
+  framed(ctx, mid - 19, y + h - 37, 38, 6, PALETTE.wall);
+  for (const px of [-16, 12]) framed(ctx, mid + px, y + h - 31, 4, 8, PALETTE.gold);
+}
+
 /** A copper-green roof and dome with the torch of learning on top, after the Jefferson Building. */
 function drawLibrary(ctx: CanvasRenderingContext2D, entry: Site) {
   drawRoofed(ctx, entry);
@@ -690,6 +723,7 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
     else if (entry.style === "memorial") drawMemorial(ctx, entry);
     else if (entry.style === "library") drawLibrary(ctx, entry);
     else if (entry.style === "gate") drawGate(ctx, entry);
+    else if (entry.style === "atlas") drawAtlas(ctx, entry);
     else if (entry.style === "construction") drawConstruction(ctx, entry);
     else if (entry.style === "court") drawCourt(ctx, entry);
     else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);

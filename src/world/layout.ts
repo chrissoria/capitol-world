@@ -38,7 +38,8 @@ export type SiteStyle =
   | "department"
   | "gate"
   | "construction"
-  | "court";
+  | "court"
+  | "atlas";
 
 export interface Site {
   key: string;
@@ -52,7 +53,7 @@ export interface Site {
   /** Street in front of the dock that robots drive along. */
   lane: number;
   capacity: number;
-  /** For a gate: the world a click on it leads to. */
+  /** For a gate: the world (or the map of the United States) a click on it leads to. */
   travel?: string;
   /** A shared building out in one wing: the only avenue its street runs to. */
   reach?: "House" | "Senate";
@@ -119,6 +120,11 @@ export function buildLayout(committees: Committee[]): Layout {
   // The other two branches, across the top. The court is a placeholder: a building with nothing in it yet.
   add(makeSite("president", "whitehouse", "White House", "White House", "Center", { x: 72, y: 3, w: 32, h: 14 }, { x: 80, w: 16 }));
   add(makeSite("court", "court", "Supreme Court", "Supreme Court", "Center", { x: 124, y: 6, w: 24, h: 11 }, { x: 130, w: 12 }));
+
+  // The way out to the map of the United States, on the lawn the other side of the White House from the court.
+  const atlas = makeSite("gate-usa", "atlas", "Map of the United States", "U.S. Map", "Center", { x: 28, y: 6, w: 24, h: 11 }, { x: 34, w: 12 });
+  atlas.travel = "usa";
+  add(atlas);
 
   // What the chambers share, out at the sides: beside each chamber, on the street the mall crosses,
   // and below those, beside the calendars.

@@ -101,6 +101,13 @@ body {
   max-width: 100%;
 }
 
+/* These set their own `display`, which would otherwise show them while they are meant to be hidden. */
+#congress[hidden],
+#about-open[hidden],
+#tabs[hidden] {
+  display: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
