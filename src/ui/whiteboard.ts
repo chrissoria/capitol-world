@@ -73,7 +73,7 @@ interface Bar {
   color: string;
 }
 
-export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) => void) {
+export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) => void, outside: () => CanvasImageSource | null = () => null) {
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pick = <T extends string>(id: string, options: [T, string][]) => {
     const node = el("select", { id, "aria-label": id });
@@ -83,6 +83,29 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
   const measure = pick("wb-measure", MEASURES.map(([key, label]) => [key, label] as [BoardSpec["measure"], string]));
   const across = pick("wb-across", ACROSS);
   const who = pick("wb-who", WHO);
+  // The years to plot, for a closer look at part of what the Stats panel has chosen.
+  const fromYear = el("select", { id: "wb-from", "aria-label": "From year" });
+  const toYear = el("select", { id: "wb-to", "aria-label": "To year" });
+  const years = el("span", { class: "wb-years" }, fromYear, el("span", {}, "to"), toYear);
+  const zoom = el("button", { type: "button", class: "wb-zoom" });
+  const pane = el("canvas", { width: "160", height: "120" });
+  let known = "";
+  /** Offer the years the measures span, and say which of them are wanted. */
+  function yearRange(rows: BoardRow[]) {
+    const all = [...new Set(rows.map((row) => row.introduced.slice(0, 4)).filter(Boolean))].sort();
+    if (all.join() !== known) {
+      known = all.join();
+      for (const [node, fallback] of [[fromYear, all[0]], [toYear, all[all.length - 1]]] as const) {
+        const keep = node.value;
+        node.replaceChildren(...all.map((year) => el("option", { value: year }, year)));
+        node.value = all.includes(keep) ? keep : (fallback ?? "");
+      }
+      years.hidden = all.length < 2;
+    }
+    let [low, high] = [fromYear.value, toYear.value];
+    if (low > high) [low, high] = [high, low];
+    return { low, high, narrowed: all.length > 1 && (low !== all[0] || high !== all[all.length - 1]) };
+  }
   const sheet = el("canvas", { role: "img" });
   const close = el("button", { type: "button", class: "wb-close" }, "← Back to the map");
   // The room: pictures on the wall, a plant, and a teacher at the left of the board who does the drawing.
@@ -143,10 +166,12 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
 
   root.replaceChildren(
     el("div", { class: "wb-pics", "aria-hidden": "true" }, el("i", { class: "land" }), el("i", { class: "flag" }), el("i", { class: "seal" }), el("i", { class: "land dusk" })),
+    el("div", { class: "wb-window", "aria-hidden": "true" }, pane),
     teacher,
     plant,
     el("div", { class: "wb-frame" },
-      el("div", { class: "wb-bar" }, measure, across, who, close),
+      el("div", { class: "wb-bar" }, measure, across, who, years, zoom, close),
+      el("p", { class: "wb-hint" }, "Which Congresses, period, kind of measure and chamber are counted is chosen in the Stats panel."),
       sheet,
       el("div", { class: "wb-tray" }, el("i", { class: "R" }), el("i", { class: "D" }), el("i", { class: "I" }), el("i", {}), el("b", {}))),
   );
@@ -185,12 +210,17 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     const only = spec.who && spec.across !== "party" ? `, ${WHO.find(([key]) => key === spec.who)![1]}` : "";
     const small = Math.max(11, Math.min(15, width / 42));
     write(`${title} ${split}${only}`, 18, 30, Math.max(15, Math.min(24, width / 26)), PEN.black, "left");
-    write(data.caption, 18, 30 + small * 1.5, small, PEN.grey, "left");
+    const range = data.ready ? yearRange(data.rows) : { low: "", high: "", narrowed: false };
+    const span = range.narrowed ? `, ${range.low === range.high ? range.low : `${range.low} to ${range.high}`} only` : "";
+    write(data.caption + span, 18, 30 + small * 1.5, small, PEN.grey, "left");
     if (!data.ready) {
       write("Counting…", width / 2, height / 2, 22, PEN.grey);
       return { strokes, notes, summary: "Loading" };
     }
-    const rows = data.rows.filter((row) => !spec.who || spec.across === "party" || row.party === spec.who);
+    const rows = data.rows.filter((row) => {
+      const year = row.introduced.slice(0, 4);
+      return year >= range.low && year <= range.high && (!spec.who || spec.across === "party" || row.party === spec.who);
+    });
     if (!rows.length) {
       write("Nothing to count here.", width / 2, height / 2, 20, PEN.grey);
       return { strokes, notes, summary: "No measures match" };
@@ -201,7 +231,20 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     const left = 56;
     const right = width - 20;
     const top = 30 + small * 1.5 + 34;
-    const bottom = height - 44;
+    // The parties are named once, in a key along the bottom, rather than on the chart.
+    const keyed = spec.across === "time" || spec.across === "party";
+    const bottom = height - (keyed ? 66 : 44);
+    const partyName = (party: string) => (party === "R" ? "Republicans" : party === "D" ? "Democrats" : "Independents");
+    const legend = (parties: string[]) => {
+      const widths = parties.map((party) => 26 + partyName(party).length * small * 0.56);
+      let x = Math.max(left, (width - widths.reduce((sum, w) => sum + w + 18, -18)) / 2);
+      parties.forEach((party, i) => {
+        const y = height - 16;
+        line([[x, y - 5], [x + 18, y - 5]], penOf(party), 5);
+        write(partyName(party), x + 24, y, small, penOf(party), "left");
+        x += widths[i] + 18;
+      });
+    };
     const penOf = (party: string) => (party === "R" ? PEN.R : party === "D" ? PEN.D : party === "I" ? PEN.I : PEN.black);
     const groupBy = (key: (row: BoardRow) => string) => {
       const groups = new Map<string, BoardRow[]>();
@@ -239,14 +282,13 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
       series.forEach((party, s) => {
         const path = points[s].map((value, i) => [xOf(i), bottom - ((bottom - top) * value) / max] as [number, number]);
         line(path, penOf(party), 3.5);
-        const [lx, ly] = path[path.length - 1];
-        write(party === "R" ? "Republicans" : party === "D" ? "Democrats" : "Independents", Math.min(lx, right - 4), ly - 10, small, penOf(party), "right");
         summary.push(`${party}: ${points[s].map((value, i) => `${keys[i]} ${show(value)}`).join(", ")}`);
       });
       const every = Math.max(1, Math.ceil(keys.length / Math.max(2, Math.floor((right - left) / 62))));
       keys.forEach((k, i) => {
         if (i % every === 0) write(byYear ? k : new Date(`${k}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "2-digit" }), xOf(i), bottom + 18, small * 0.9, PEN.grey);
       });
+      legend(series);
       return { strokes, notes, summary: summary.join(". ") };
     }
 
@@ -302,10 +344,11 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
         const h = ((bottom - top) * bar.value) / max;
         hatch(x, bottom - h, barW, h, bar.color);
         write(show(bar.value), x + barW / 2, bottom - h - 8, small * 1.1, bar.color);
-        write(bar.label, x + barW / 2, bottom + 18, small * 0.95, PEN.black);
-        if (share) write(`of ${bar.count.toLocaleString()}`, x + barW / 2, bottom + 18 + small * 1.1, small * 0.8, PEN.grey);
+        if (spec.across !== "party") write(bar.label, x + barW / 2, bottom + 18, small * 0.95, PEN.black);
+        if (share) write(`of ${bar.count.toLocaleString()}`, x + barW / 2, bottom + (spec.across === "party" ? 16 : 18 + small * 1.1), small * 0.8, PEN.grey);
       });
     }
+    if (spec.across === "party") legend((["R", "D", "I"] as const).filter((party) => bars.some((bar) => bar.label === partyName(party))));
     return { strokes, notes, summary: bars.map((bar) => `${bar.label}: ${show(bar.value)}`).join(", ") };
   }
 
@@ -373,7 +416,27 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     paint(started);
   }
 
-  for (const node of [measure, across, who]) node.addEventListener("change", () => draw());
+  for (const node of [measure, across, who, fromYear, toYear]) node.addEventListener("change", () => draw());
+  // "Just the board" hides the room for anyone who wants the chart as large as it will go.
+  const ZOOM_KEY = "capitol-world-board";
+  const setZoom = (on: boolean) => {
+    root.classList.toggle("just-board", on);
+    zoom.textContent = on ? "Show the room" : "Just the board";
+    zoom.setAttribute("aria-pressed", String(on));
+    try {
+      localStorage.setItem(ZOOM_KEY, on ? "board" : "room");
+    } catch {
+      // Not remembered, but it still works for this visit.
+    }
+  };
+  let wanted = false;
+  try {
+    wanted = localStorage.getItem(ZOOM_KEY) === "board";
+  } catch {
+    // The room, then.
+  }
+  setZoom(wanted);
+  zoom.addEventListener("click", () => setZoom(!root.classList.contains("just-board")));
   new ResizeObserver(() => !root.hidden && draw(false)).observe(sheet);
   const shut = () => {
     if (root.hidden) return;
@@ -406,6 +469,13 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
       if (spec.across) across.value = spec.across;
       if (spec.who !== undefined) who.value = spec.who;
       if (root.hidden) {
+        // The window looks out on the Capitol.
+        const world = outside();
+        const glass = pane.getContext("2d");
+        if (world && glass) {
+          glass.imageSmoothingEnabled = false;
+          glass.drawImage(world, 392, 290, 560, 420, 0, 0, pane.width, pane.height); // the House chamber, dome to steps
+        }
         root.hidden = false;
         onChange(true);
       }

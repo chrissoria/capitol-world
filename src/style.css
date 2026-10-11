@@ -990,7 +990,7 @@ label.check input {
   top: 50px;
   bottom: 46px;
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   background: #fdfdfb;
   border: 6px solid var(--ink);
   outline: 4px solid #b9c0cc;
@@ -1137,5 +1137,96 @@ label.check input {
   .wb-close {
     font-size: 11px;
     padding: 2px 4px;
+  }
+}
+
+/* The board's own choices, the hint under them, and the room's window. */
+.wb-years {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.wb-years[hidden] {
+  display: none;
+}
+
+.wb-zoom {
+  margin-left: auto;
+}
+
+.wb-zoom + .wb-close {
+  margin-left: 0;
+}
+
+.wb-hint {
+  margin: 0;
+  padding: 0 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.wb-window {
+  position: absolute;
+  left: calc(var(--teacher) * 0.1);
+  top: 7cqh;
+  width: calc(var(--teacher) * 0.7);
+  aspect-ratio: 4 / 3;
+  box-sizing: border-box;
+  border: 5px solid var(--ink);
+  outline: 4px solid #f4ecd6;
+  outline-offset: -9px;
+  background: #a8dcff;
+  box-shadow: 0 6px 0 -1px #b98452, 0 9px 0 -1px var(--ink);
+}
+
+.wb-window canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* The glazing bars. */
+.wb-window::before,
+.wb-window::after {
+  content: "";
+  position: absolute;
+  background: #f4ecd6;
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.wb-window::before {
+  left: calc(50% - 2px);
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.wb-window::after {
+  top: calc(50% - 2px);
+  left: 0;
+  right: 0;
+  height: 4px;
+}
+
+#whiteboard.just-board .wb-teacher,
+#whiteboard.just-board .wb-plant,
+#whiteboard.just-board .wb-pics,
+#whiteboard.just-board .wb-window {
+  display: none;
+}
+
+#whiteboard.just-board .wb-frame {
+  left: 8px;
+  right: 8px;
+  top: 8px;
+  bottom: 8px;
+}
+
+@container (max-width: 480px) {
+  .wb-hint {
+    display: none;
   }
 }

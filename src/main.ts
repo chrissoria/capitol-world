@@ -155,6 +155,7 @@ async function main() {
         whereIs: (id) => scene.whereIs(id),
         lookAt: (key) => scene.lookAt(key),
         learning: (open) => music.setTrack(open ? "library" : "map"),
+        mapView: () => (scene.textures.exists("ground") ? (scene.textures.get("ground").getSourceImage() as HTMLCanvasElement) : null),
       });
       replayButton.hidden = !scene.hasEvents;
       const initial = targetFromHash();

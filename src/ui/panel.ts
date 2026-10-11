@@ -63,6 +63,8 @@ export interface PanelActions {
   lookAt(siteKey: string): void;
   /** The whiteboard in the library has been opened or closed. */
   learning(open: boolean): void;
+  /** The map as drawn, for the view through the library's window. */
+  mapView(): CanvasImageSource | null;
 }
 
 function congressUrl(id: string): string {
@@ -77,7 +79,7 @@ export function createPanel(world: World, actions: PanelActions) {
   const active = final ? "" : "active ";
   describeFinished(final);
   // The whiteboard in the Library of Congress, where the Stats tab's figures are drawn as charts.
-  const board = createWhiteboard(document.getElementById("whiteboard")!, (open) => actions.learning(open));
+  const board = createWhiteboard(document.getElementById("whiteboard")!, (open) => actions.learning(open), () => actions.mapView());
   const members = new Map(world.members.map((member) => [member.id, member]));
   const bills = new Map(world.bills.map((bill) => [bill.id, bill]));
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("#tabs button")];
