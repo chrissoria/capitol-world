@@ -140,6 +140,13 @@ const SHARED: Record<string, Note> = {
     ],
     here: "Bills that became law in the last 30 days. The Law Archive stands in for the National Archives; it is not a real building.",
   },
+  court: {
+    role: [
+      "The Supreme Court and the lower federal courts decide cases that turn on what a law means and whether it squares with the Constitution. A law the Court holds unconstitutional can no longer be enforced; Congress can answer by rewriting it or, rarely, by proposing a constitutional amendment.",
+      "The President nominates the justices and the Senate confirms them.",
+    ],
+    here: "No bills come here: a law reaches the courts as a case, not as a bill.",
+  },
   library: {
     role: [
       "The Library of Congress runs Congress.gov, the public record of every bill, action and vote, which is where everything on this map comes from. Its Congressional Research Service works only for Congress and writes the official summary of each bill.",

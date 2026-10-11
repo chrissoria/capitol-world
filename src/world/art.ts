@@ -2,7 +2,7 @@
 // nothing to license and one consistent style.
 
 import type { Member } from "../data/types";
-import { AVENUE_HOUSE, AVENUE_SENATE, MAP_H, MAP_W, TILE, type Layout, type Rect, type Site } from "./layout";
+import { AVENUE_BOTTOM, AVENUE_HOUSE, AVENUE_SENATE, AVENUE_TOP, MAP_H, MAP_W, TILE, type Layout, type Rect, type Site } from "./layout";
 
 export const PALETTE = {
   ink: "#2e2a44",
@@ -283,6 +283,58 @@ function disc(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, 
 }
 
 /** The House and Senate: a long roofed hall with a portico, steps and a dome. */
+/** The Supreme Court: a marble temple front, steps and all. */
+function drawCourt(ctx: CanvasRenderingContext2D, entry: Site) {
+  const { x, y, w, h } = scale(entry.rect);
+  const mid = x + Math.round(w / 2);
+  const pedimentH = Math.round(h * 0.28);
+  const bandY = y + pedimentH;
+  const stepsH = 15;
+  const top = bandY + 10;
+  const bodyH = h - pedimentH - 10 - stepsH;
+  const porticoW = Math.min(w - 110, 220);
+  const left = mid - porticoW / 2;
+
+  // The wings either side of the portico, lower than it.
+  framed(ctx, x, top + 14, w, bodyH - 14 + stepsH, PALETTE.wall);
+  box(ctx, x + 1, y + h - 6, w - 2, 5, PALETTE.wallShade);
+  framed(ctx, x - 2, top + 10, w + 4, 6, PALETTE.white);
+  for (let wx = x + 10; wx + 10 <= x + w - 8; wx += 20) {
+    if (wx + 10 > left - 8 && wx < left + porticoW + 8) continue;
+    framed(ctx, wx, top + 26, 10, 22, PALETTE.window);
+    box(ctx, wx + 4, top + 27, 2, 20, PALETTE.ink);
+    box(ctx, wx + 1, top + 36, 8, 1, PALETTE.ink);
+  }
+
+  // The porch in shadow, the bronze doors, and eight columns in front of them.
+  framed(ctx, left, top, porticoW, bodyH + 2, "#d9d3c2");
+  framed(ctx, mid - 11, top + bodyH - 40, 22, 42, "#8a6a3a");
+  box(ctx, mid - 1, top + bodyH - 39, 2, 40, PALETTE.ink);
+  for (let i = 0; i < 8; i++) {
+    const cx = Math.round(left + 5 + (i * (porticoW - 20)) / 7);
+    framed(ctx, cx, top, 10, bodyH + 2, PALETTE.white);
+    box(ctx, cx + 6, top + 1, 3, bodyH, PALETTE.stone);
+    framed(ctx, cx - 1, top, 12, 4, PALETTE.white);
+    framed(ctx, cx - 1, top + bodyH - 2, 12, 4, PALETTE.white);
+  }
+
+  // The entablature and the pediment over it.
+  framed(ctx, left - 5, bandY, porticoW + 10, 11, PALETTE.white);
+  box(ctx, left - 3, bandY + 7, porticoW + 6, 2, PALETTE.stoneEdge);
+  for (let i = 0; i < pedimentH; i++) {
+    const half = Math.round(((porticoW / 2 + 5) * (i + 1)) / pedimentH);
+    box(ctx, mid - half, y + i, half * 2, 1, PALETTE.ink);
+    if (i > 1 && half > 4) box(ctx, mid - half + 3, y + i, half * 2 - 6, 1, PALETTE.white);
+  }
+  box(ctx, mid - 22, bandY - 9, 44, 5, PALETTE.stone);
+  box(ctx, mid - 4, bandY - 15, 8, 6, PALETTE.stone);
+
+  // The steps, widening as they come down.
+  for (let step = 0; step < 3; step++) {
+    framed(ctx, left - 8 - step * 7, y + h - stepsH + step * 5, porticoW + 16 + step * 14, 6, step % 2 ? PALETTE.stone : PALETTE.white);
+  }
+}
+
 function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   const { x, y, w, h } = scale(entry.rect);
   const [roof, roofDark] = roofColors(entry);
@@ -527,8 +579,8 @@ export interface Landmark {
 
 // Lawns where the signs of the times go, one to each: by the White House, and down the mall.
 const ERA_LAWNS: Rect[] = [
-  { x: 70, y: 6, w: 6, h: 4 },
-  { x: 82, y: 29, w: 11, h: 6 },
+  { x: 56, y: 6, w: 12, h: 9 },
+  { x: 82, y: 31, w: 11, h: 5 },
   { x: 82, y: 37, w: 11, h: 7 },
   { x: 82, y: 76, w: 11, h: 10 },
   { x: 82, y: 88, w: 11, h: 9 },
@@ -575,7 +627,7 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
   }
 
   // The mall between the avenues.
-  const mall: Rect = { x: AVENUE_HOUSE + 2, y: 12, w: AVENUE_SENATE - AVENUE_HOUSE - 2, h: 88 };
+  const mall: Rect = { x: AVENUE_HOUSE + 2, y: AVENUE_TOP, w: AVENUE_SENATE - AVENUE_HOUSE - 2, h: AVENUE_BOTTOM - AVENUE_TOP };
   box(ctx, mall.x * TILE, mall.y * TILE, mall.w * TILE, mall.h * TILE, PALETTE.grassLight);
   for (let ty = mall.y; ty < mall.y + mall.h; ty += 2)
     for (let tx = mall.x; tx < mall.x + mall.w; tx += 2) box(ctx, tx * TILE + 7, ty * TILE + 7, 2, 2, PALETTE.grass);
@@ -639,6 +691,7 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
     else if (entry.style === "library") drawLibrary(ctx, entry);
     else if (entry.style === "gate") drawGate(ctx, entry);
     else if (entry.style === "construction") drawConstruction(ctx, entry);
+    else if (entry.style === "court") drawCourt(ctx, entry);
     else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }

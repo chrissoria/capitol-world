@@ -567,6 +567,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       backButton(),
       el("div", { class: "kicker" }, words.kicker(site)),
       el("h2", {}, site.label),
+      site.style === "court" ? el("p", {}, "The judicial branch will be a world of its own, as the White House is. For now this is only the building.") : null,
       capitol ? explainSite(site) : null,
       // A door to another world.
       ...def.doors.filter((door) => door.site === site.key).map((door) => {
@@ -581,7 +582,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
         ? capitol
           ? `${here.length.toLocaleString()} ${active}bill${here.length === 1 ? "" : "s"} ${final ? "ended" : ""} here.`.replace("  ", " ")
           : `${here.length.toLocaleString()} ${plural(here.length)} here.`
-        : !capitol ? (site.style === "gate" || site.style === "library" ? "" : `No ${words.items} here.`) : final ? "No bills ended here." : "No bills with an action in the last 30 days are here."),
+        : !capitol ? (site.style === "gate" || site.style === "library" ? "" : `No ${words.items} here.`) : site.style === "court" ? "" : final ? "No bills ended here." : "No bills with an action in the last 30 days are here."),
       el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${members.get(bill.sponsor)?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
       here.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${here.length}.`) : null,
     );

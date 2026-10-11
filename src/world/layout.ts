@@ -1,6 +1,8 @@
-// The map, in tiles. House wing on the west, Senate wing mirrored on the east,
-// a mall between them, and the White House row across the top. Bills travel
-// from the hoppers at the bottom toward the top.
+// The map, in tiles. The White House stands alone across the top, with the
+// Supreme Court beside it; everything below is Congress: the House wing on the
+// west, the Senate wing mirrored on the east, a mall between them, and the
+// buildings both chambers share out at the sides. Bills travel from the
+// hoppers at the bottom toward the top.
 
 import type { Chamber, Committee } from "../data/types";
 
@@ -9,9 +11,9 @@ export const MAP_W = 176;
 export const MAP_H = 104;
 export const AVENUE_HOUSE = 80; // two tiles wide: 80 and 81
 export const AVENUE_SENATE = 94; // 94 and 95
-const AVENUE_TOP = 12;
-const AVENUE_BOTTOM = 100;
-const CROSSINGS = [12, 45, 99];
+export const AVENUE_TOP = 18; // the street in front of the White House
+export const AVENUE_BOTTOM = 100;
+const CROSSINGS = [AVENUE_TOP, 45, 99];
 
 export interface Rect {
   x: number;
@@ -35,7 +37,8 @@ export type SiteStyle =
   | "library"
   | "department"
   | "gate"
-  | "construction";
+  | "construction"
+  | "court";
 
 export interface Site {
   key: string;
@@ -51,6 +54,8 @@ export interface Site {
   capacity: number;
   /** For a gate: the world a click on it leads to. */
   travel?: string;
+  /** A shared building out in one wing: the only avenue its street runs to. */
+  reach?: "House" | "Senate";
 }
 
 export interface Layout {
@@ -107,15 +112,21 @@ export function buildLayout(committees: Committee[]): Layout {
   const sites = new Map<string, Site>();
   const add = (entry: Site) => sites.set(entry.key, entry);
 
-  // Top row.
-  add(makeSite("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
-  add(makeSite("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
-  add(makeSite("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
-  add(makeSite("library", "library", "Library of Congress", "Library", "Center", { x: 30, y: 3, w: 16, h: 8 }));
-  add(makeSite("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", { x: 130, y: 3, w: 16, h: 8 }));
-  add(makeSite("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
+  // The other two branches, across the top. The court is a placeholder: a building with nothing in it yet.
+  add(makeSite("president", "whitehouse", "White House", "White House", "Center", { x: 72, y: 3, w: 32, h: 14 }, { x: 80, w: 16 }));
+  add(makeSite("court", "court", "Supreme Court", "Supreme Court", "Center", { x: 124, y: 6, w: 24, h: 11 }, { x: 130, w: 12 }));
 
-  const houseChamber: Rect = { x: 12, y: 17, w: 60, h: 27 };
+  // What the chambers share, out at the sides: beside each chamber, on the street the mall crosses,
+  // and below those, beside the calendars.
+  const beside: Rect = { x: 3, y: 36, w: 16, h: 8 };
+  const below: Rect = { x: 3, y: 47, w: 16, h: 7 };
+  add(makeSite("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", beside));
+  add(makeSite("law", "archive", "Law Archive", "Law Archive", "Center", mirror(beside)));
+  add({ ...makeSite("library", "library", "Library of Congress", "Library", "Center", below), reach: "House" });
+  add({ ...makeSite("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", mirror(below)), reach: "Senate" });
+  add(makeSite("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 20, w: 10, h: 8 }));
+
+  const houseChamber: Rect = { x: 22, y: 21, w: 50, h: 23 };
   const wings: { chamber: "House" | "Senate"; flip: (r: Rect) => Rect }[] = [
     { chamber: "House", flip: (r) => r },
     { chamber: "Senate", flip: mirror },
@@ -124,13 +135,13 @@ export function buildLayout(committees: Committee[]): Layout {
   const conveyors = {} as Layout["conveyors"];
 
   for (const { chamber, flip } of wings) {
-    const floorDock = flip({ x: 30, y: 0, w: 24, h: 0 });
+    const floorDock = flip({ x: 35, y: 0, w: 24, h: 0 });
     add(makeSite(`floor:${chamber}`, "chamber", `${chamber} Floor`, `${chamber} Floor`, chamber, chambers[chamber], {
       x: floorDock.x,
       w: floorDock.w,
     }));
     add(makeSite(`other_chamber:${chamber}`, "inbox", `${chamber} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
-    add(makeSite(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 30, y: 48, w: 24, h: 6 })));
+    add(makeSite(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 35, y: 48, w: 24, h: 6 })));
     add(makeSite(`referral_desk:${chamber}`, "desk", `${chamber} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
     const hopper = flip({ x: 6, y: 93, w: 9, h: 5 });
     add(makeSite(`hopper:${chamber}`, "hopper", `${chamber} Hopper`, "Hopper", chamber, hopper));
@@ -170,8 +181,9 @@ export function streets(sites: Map<string, Site>): Pick<Layout, "lanes" | "avenu
   const lanes: Layout["lanes"] = [];
   for (const entry of sites.values()) {
     const centre = entry.dock.x + entry.dock.w / 2;
-    if (entry.wing === "House") lanes.push({ y: entry.lane, x1: Math.min(centre, entry.dock.x), x2: AVENUE_HOUSE + 2 });
-    else if (entry.wing === "Senate") lanes.push({ y: entry.lane, x1: AVENUE_SENATE, x2: Math.max(centre, entry.dock.x + entry.dock.w) });
+    const side = entry.reach ?? entry.wing;
+    if (side === "House") lanes.push({ y: entry.lane, x1: Math.min(centre, entry.dock.x), x2: AVENUE_HOUSE + 2 });
+    else if (side === "Senate") lanes.push({ y: entry.lane, x1: AVENUE_SENATE, x2: Math.max(centre, entry.dock.x + entry.dock.w) });
     else lanes.push({ y: entry.lane, x1: Math.min(entry.dock.x, AVENUE_HOUSE), x2: Math.max(entry.dock.x + entry.dock.w, AVENUE_SENATE + 2) });
   }
   for (const y of CROSSINGS) lanes.push({ y, x1: AVENUE_HOUSE, x2: AVENUE_SENATE + 2 });
@@ -208,7 +220,7 @@ export function anchorOf(entry: Site): { x: number; y: number } {
 /** Street route between two sites, in pixels. */
 export function route(from: Site, to: Site): { x: number; y: number }[] {
   const avenue = (entry: Site, other: Site) => {
-    const wing = entry.wing === "Center" ? (other.wing === "Senate" ? "Senate" : "House") : entry.wing;
+    const wing = entry.reach ?? (entry.wing === "Center" ? (other.reach ?? (other.wing === "Senate" ? "Senate" : "House")) : entry.wing);
     return (wing === "House" ? AVENUE_HOUSE + 1 : AVENUE_SENATE + 1) * TILE;
   };
   const a = anchorOf(from);

@@ -33,7 +33,7 @@ export const capitol: WorldDef = {
             lead: `${world.counts.world.toLocaleString()} bills had an action in the 30 days up to ${new Date(`${world.data_through}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}. Each sheet of paper on the map is one of them, sitting where its latest action left it.`,
             where: "Where those bills are",
           },
-    kicker: (site) => (site.wing === "Center" ? "Shared" : site.wing),
+    kicker: (site) => (site.style === "court" ? "Judicial branch" : site.style === "whitehouse" ? "Executive branch" : site.wing === "Center" ? "Shared" : site.wing),
     person: "Sponsor",
     deadOnly: "Dead bills only",
     searchHint: "Bill number, title words, or a name",
