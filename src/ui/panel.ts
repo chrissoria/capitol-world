@@ -668,7 +668,8 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     sections.search,
     el("label", { for: "search-box" }, capitol ? "Search all bills and members" : `Search every ${words.item}`),
     searchBox,
-    el("label", { class: "check", for: "search-everywhere" }, everywhere, capitol ? ` Bills of every other ${period} too` : ` ${Items} of every other president too`),
+    // A world with one period, a board's whole record, has no others to search.
+    def.room ? null : el("label", { class: "check", for: "search-everywhere" }, everywhere, capitol ? ` Bills of every other ${period} too` : ` ${Items} of every other president too`),
     searchResults,
   );
   let searchRun = 0;
@@ -704,11 +705,12 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       const id = index.id[i];
       const [, type, number] = id.split("-");
       const onMap = bills.has(id);
+      const known = def.room ? bills.get(id) : undefined; // in a world that is one room every item is known, by its own number
       const button = el(
         "button",
         { type: "button" },
-        el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })} · ${index.title[i]}`),
-        el("span", { class: "row-sub" }, `${index.statuses[index.status[i]] ?? ""} · ${niceDate(index.date[i])}${onMap ? " · on the map" : ""}`),
+        el("span", { class: "row-title" }, known ? `${billLabel(known)} · ${known.title}` : `${billLabel({ type: type.toUpperCase(), number })} · ${index.title[i]}`),
+        el("span", { class: "row-sub" }, `${index.statuses[index.status[i]] ?? ""} · ${niceDate(index.date[i])}${onMap && !def.room ? " · on the map" : ""}`),
       );
       button.addEventListener("click", () => {
         if (onMap) actions.select({ type: "bill", id });
@@ -725,7 +727,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     );
 
     // The other Congresses, newest first. Their indexes load the first time this is used.
-    if (!everywhere.checked) return;
+    if (!everywhere.checked || def.room) return;
     const others = (await loadCongressLine()).filter((entry) => entry.congress !== world.congress);
     if (run !== searchRun || !others.length) return;
     const waiting = el("p", { class: "note" }, `Searching the other ${periods}…`);
@@ -821,12 +823,12 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   about.addEventListener("click", (event) => {
     if (event.target === about) about.close(); // a click on the backdrop
   });
-  const ownAbout = leg?.about?.(world, final);
+  const ownAbout = leg?.about?.(world, final) ?? def.about?.(world);
   if (ownAbout) {
     add(document.getElementById("about-body")!,
       el("h2", { id: "about-title" }, "About this map"),
       ...ownAbout.flatMap((part) => [part.heading ? el("h3", {}, part.heading) : null, el("p", part.note ? { class: "note" } : {}, part.text)]),
-      el("p", {}, "Party is shown by the pin on each figure and in this panel: ", pin("D"), "Democrat, ", pin("R"), "Republican, ", pin("I"), "Independent."),
+      leg ? el("p", {}, "Party is shown by the pin on each figure and in this panel: ", pin("D"), "Democrat, ", pin("R"), "Republican, ", pin("I"), "Independent.") : null,
     );
   } else add(document.getElementById("about-body")!, 
     el("h2", { id: "about-title" }, "About this map"),

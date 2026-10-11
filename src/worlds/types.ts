@@ -129,6 +129,8 @@ export interface WorldDef {
   words: Words;
   /** Set for a world that is one room and no map: it opens inside, and there is no way out to a map of its own. */
   room?: RoomWords;
+  /** The About box of a world that is not a legislature, where Capitol World's would be wrong. */
+  about?(world: World): { heading?: string; text: string; note?: boolean }[];
   /** Which tabs the panel shows. */
   tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string; rosterNote?: string; seatWord?: string };
   /** List the overview by where the items are (the Capitol's way) rather than by their area. */

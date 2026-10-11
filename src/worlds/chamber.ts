@@ -429,6 +429,12 @@ export const chamber: WorldDef = {
     footnote: "Counted by the day each item was filed. Local offices in California are nonpartisan, so nothing here is counted by party.",
   },
   doors: [{ site: "gate-usa", to: "usa", label: "← Back out to the map" }],
+  about: (world) => [
+    { text: `This is the room where the ${entry.name} meets. The ${entry.member.toLowerCase()}s now serving are on the dais, the clerk has the items waiting on an agenda, and the calendar on the wall has every meeting on record.` },
+    { heading: "The data", text: `Everything comes from ${entry.site}: the items filed, each meeting’s agenda, what was done with each item and how each member voted. The record here begins in ${entry.since || "the body’s first year on that site"} and runs through ${day(world.data_through)}.` },
+    { heading: "What is animation", text: "The people coming in, sitting down and going up to the microphone are made up. Who spoke at a meeting is not in the record. Re-staging a meeting seats the members now serving, not those who were there. The figures are drawn at random and are not likenesses." },
+    { text: "Local offices in California are nonpartisan, so no one here wears a party’s pin.", note: true },
+  ],
   itemNotes: (bill) => notes.get(bill.id) ?? [],
   words: {
     item: "item",

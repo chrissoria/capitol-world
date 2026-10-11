@@ -8,6 +8,8 @@ export interface CalendarActions {
   committee(code: string): Promise<CommitteeInfo | undefined>;
   /** Show the room as it would have been for one meeting. */
   stage(code: string, meetingId: string): void;
+  /** What to call the site each meeting links to, where it is not Congress.gov. */
+  site?(): string;
 }
 
 const WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -63,7 +65,7 @@ export function createCalendar(root: HTMLElement, actions: CalendarActions) {
       el("strong", {}, meeting.title || meeting.type),
       el("span", { class: "facts" }, facts.join(" · ")),
       ...(meeting.outcomes ?? []).slice(0, 3).map((line) => el("span", { class: "outcome" }, line)),
-      el("span", { class: "acts" }, stage, el("a", { href: meetingUrl(meeting, info?.chamber ?? "House"), target: "_blank", rel: "noopener" }, "Congress.gov ↗")),
+      el("span", { class: "acts" }, stage, el("a", { href: meetingUrl(meeting, info?.chamber ?? "House"), target: "_blank", rel: "noopener" }, `${actions.site?.() ?? "Congress.gov"} ↗`)),
     );
   }
 

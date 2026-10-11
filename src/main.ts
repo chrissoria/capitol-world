@@ -149,7 +149,7 @@ async function main() {
   let current: Target | null = null;
   let panel: ReturnType<typeof createPanel> | undefined;
   const committeeOf = (code: string) => loadCommittees().then((file) => file.committees[code], () => undefined);
-  const calendar = createCalendar($("wall-calendar"), { committee: committeeOf, stage: (code, meetingId) => scene.stage(code, meetingId) });
+  const calendar = createCalendar($("wall-calendar"), { committee: committeeOf, stage: (code, meetingId) => scene.stage(code, meetingId), site: () => def.room?.official().replace(/^the /, "") ?? def.legislature?.site ?? "Congress.gov" });
 
   const scene: WorldScene = startGame($("game"), world, {
     onSelect(target) {
