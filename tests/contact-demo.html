@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Contact box: sample members</title>
+    <link rel="stylesheet" href="/src/style.css" />
+    <style>
+      /* The app's page does not scroll; this one is a column of cards, each as wide as the side panel. */
+      html, body { height: auto; overflow: auto; background: #5fae55; }
+      #cards { display: flex; flex-wrap: wrap; gap: 16px; padding: 16px; align-items: flex-start; }
+      #cards .tab { flex: 0 1 342px; background: var(--paper); border: 4px solid var(--ink); overflow: visible; }
+    </style>
+  </head>
+  <body>
+    <!--
+      A page for developing the contact box against tests/fixtures/members.sample.json, outside the game.
+      Open it with the dev server: npx vite --port 5187, then /tests/contact-demo.html. It is not part of the build.
+    -->
+    <div id="cards"></div>
+    <script type="module" src="./contact-demo.ts"></script>
+  </body>
+</html>

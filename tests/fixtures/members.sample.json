@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "_about": "A sample of world/members.json for developing and checking the contact box. All records but X000000 are copied from unitedstates/congress-legislators (CC0, legislators-current, read 2026-10-10), including the mistyped contact_form of F000484, which the app must refuse. X000000 is made up, so that the mailto path has something to run on: no such member, address or number exists.",
+  "members": {
+    "S000033": {
+      "url": "https://www.sanders.senate.gov",
+      "contact_form": "https://www.sanders.senate.gov/contact/",
+      "email": "",
+      "phone": "202-224-5141",
+      "office": "332 Dirksen Senate Office Building",
+      "address": "332 Dirksen Senate Office Building Washington DC 20510"
+    },
+    "M001153": {
+      "url": "https://www.murkowski.senate.gov",
+      "contact_form": "https://www.murkowski.senate.gov/public/index.cfm/contact",
+      "email": "",
+      "phone": "202-224-6665",
+      "office": "522 Hart Senate Office Building",
+      "address": "522 Hart Senate Office Building Washington DC 20510"
+    },
+    "S001150": {
+      "url": "https://www.schiff.senate.gov",
+      "contact_form": "",
+      "email": "",
+      "phone": "202-224-3841",
+      "office": "112 Hart Senate Office Building",
+      "address": "112 Hart Senate Office Building Washington DC 20510"
+    },
+    "P000197": {
+      "url": "https://pelosi.house.gov",
+      "contact_form": "",
+      "email": "",
+      "phone": "202-225-4965",
+      "office": "1236 Longworth House Office Building",
+      "address": "1236 Longworth House Office Building Washington DC 20515-0511"
+    },
+    "O000172": {
+      "url": "https://ocasio-cortez.house.gov",
+      "contact_form": "",
+      "email": "",
+      "phone": "202-225-3965",
+      "office": "250 Cannon House Office Building",
+      "address": "250 Cannon House Office Building Washington DC 20515-3214"
+    },
+    "P000622": {
+      "url": "https://patronis.house.gov",
+      "contact_form": "https://patronis.house.gov/contact/email-me",
+      "email": "",
+      "phone": "202-225-4136",
+      "office": "2021 Rayburn House Office Building",
+      "address": "2021 Rayburn House Office Building Washington DC 20515-0901"
+    },
+    "F000484": {
+      "url": "https://fine.house.gov",
+      "contact_form": "hhttps://fine.house.gov/address_authentication?form=/contact/email-me",
+      "email": "",
+      "phone": "202-225-2706",
+      "office": "244 Cannon House Office Building",
+      "address": "244 Cannon House Office Building Washington DC 20515-0906"
+    },
+    "X000000": {
+      "url": "https://example.org",
+      "contact_form": "https://example.org/contact",
+      "email": "office@example.org",
+      "phone": "202-555-0100",
+      "office": "100 Example House Office Building",
+      "address": "100 Example House Office Building Washington DC 20515"
+    }
+  }
+}
