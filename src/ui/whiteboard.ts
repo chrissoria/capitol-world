@@ -483,8 +483,9 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     /** Show the board, optionally with a particular chart. */
     open(spec: Partial<BoardSpec> = {}) {
       if (spec.measure && measures.some(([key]) => key === spec.measure)) measure.value = spec.measure;
-      if (spec.across) across.value = spec.across;
-      if (spec.who !== undefined) who.value = spec.who;
+      // A world's board may not have every way to split (the Court's has no parties): fall back to its first.
+      if (spec.across) across.value = splits.some(([key]) => key === spec.across) ? spec.across : splits[0][0];
+      if (spec.who !== undefined) who.value = partisan ? spec.who : "";
       if (root.hidden) {
         // The window looks out on the Capitol.
         const world = outside();
