@@ -131,7 +131,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       // The Stats tab is the Library of Congress: go there and open the whiteboard.
       stats.open();
       if (!board.isOpen) {
-        actions.lookAt("library");
+        if (!def.room) actions.lookAt("library");
         board.open();
       }
     } else board.close();
@@ -139,7 +139,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   }
   for (const tab of tabs) tab.addEventListener("click", () => showTab(tab.dataset.tab as keyof typeof sections));
 
-  const pin = (party: string) => el("span", { class: `pin ${party}`, title: partyName(party) });
+  const pin = (party: string) => (party || !def.room ? el("span", { class: `pin ${party}`, title: partyName(party) }) : null);
   const partyName = (party: string) => (party === "R" ? "Republican" : party === "D" ? "Democrat" : party ? "Independent" : "");
   const noArea = words.noArea ?? "Several, or none";
   const memberLine = (member: Member) =>
@@ -857,6 +857,10 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
 
   showOverview();
   return {
+    /** Open the Stats tab and the whiteboard: the way in from the statistics office of a room. */
+    openStats() {
+      showTab("stats");
+    },
     show(target: Target | null) {
       // The library has no bills: clicking it opens the Stats tab and the whiteboard.
       if (target?.type === "site" && actions.siteByKey(target.id)?.style === "library") return showTab("stats");

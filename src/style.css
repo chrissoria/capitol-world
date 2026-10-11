@@ -1088,6 +1088,26 @@ label.check input {
   background: linear-gradient(to right, #3a6fd8 0 40%, transparent 40%), repeating-linear-gradient(to bottom, #d8433b 0 4px, #fff 4px 8px);
 }
 
+/* A state's flag and a place's own, in a board's or a council's statistics office. Drawn to match
+   src/world/flags.ts; a state with no rule of its own here shows the placeholder. */
+.wb-pics i.banner {
+  background: radial-gradient(circle, #f4ecd6 0 4px, transparent 4.5px), #56607a;
+}
+
+.wb-pics i.banner.state-CA {
+  background:
+    radial-gradient(circle at 18% 26%, #b5453c 0 3px, transparent 3.5px),
+    linear-gradient(#7a4f2a, #7a4f2a) 55% 48% / 15px 7px no-repeat,
+    linear-gradient(#4f8767, #4f8767) 55% 66% / 21px 2px no-repeat,
+    linear-gradient(to bottom, #f4f1e8 0 78%, #b5453c 78%);
+}
+
+.wb-pics i.banner.place-06073 {
+  background:
+    radial-gradient(circle, #3a6fd8 0 3px, #e0aa3e 3.5px 6px, transparent 6.5px),
+    linear-gradient(to bottom, #d8433b 0 33%, #f4f1e8 33% 67%, #2f7a4a 67%);
+}
+
 .wb-pics i.seal {
   width: 30px;
   border-radius: 50%;

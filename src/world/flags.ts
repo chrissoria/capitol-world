@@ -42,6 +42,16 @@ const PLACE_FLAGS: Record<string, Banner> = {
   },
 };
 
+/**
+ * The same flags framed on the wall of the statistics office, as class names for style.css to paint
+ * (.wb-pics there): the country's, the state's, and the place's own if it is drawn.
+ */
+export const wallFlags = (state: string | undefined, place: string | undefined): string[] => [
+  "flag",
+  ...(state ? [`banner state-${state}`] : []),
+  ...(place && PLACE_FLAGS[place] ? [`banner place-${place}`] : []),
+];
+
 /** The flag of a state, by postal code; the placeholder for one not drawn yet. */
 export const stateBanner = (code: string): Banner => STATE_FLAGS[code] ?? PLACEHOLDER;
 /** A county's or a city's own flag, by Census code; undefined where it has none, or none is drawn yet. */

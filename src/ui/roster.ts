@@ -60,7 +60,7 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
         const button = el(
           "button",
           { type: "button" },
-          el("span", { class: "row-title" }, el("span", { class: `pin ${member.party}` }), `${member.name}${member.state ? ` (${seat(member)})` : ""}`),
+          el("span", { class: "row-title" }, member.party ? el("span", { class: `pin ${member.party}` }) : null, `${member.name}${member.state ? ` (${seat(member)})` : ""}`),
           el("span", { class: "row-sub" }, place, facts ? ` · ${facts}` : ""),
         );
         button.addEventListener("click", () => pick(member.id));

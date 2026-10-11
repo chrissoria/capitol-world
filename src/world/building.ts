@@ -85,6 +85,8 @@ export interface Building {
   plaques?: { id: string; x: number; y: number; room: string }[];
   /** The way in from outside, for a room the public comes to: people appear and leave here. */
   door?: { tx: number; ty: number };
+  /** Side rooms that open something when clicked, in pixels: the office where the statistics are kept. */
+  offices?: { key: string; x: number; y: number; w: number; h: number }[];
 }
 
 export interface Leaders {
@@ -1132,6 +1134,10 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
   };
 }
 
+/** The offices off a board's or a council's chamber, from the top. One with no key is not open yet. */
+const COUNCIL_OFFICES = [{ key: "stats", label: "Statistics" }, { key: "", label: "" }, { key: "", label: "" }];
+const OFFICE_W = 8; // squares across, walls included
+
 const PRESIDES = /\b(chair|mayor|president)\b/i;
 const DEPUTY = /\b(vice|deputy|pro tem)/i;
 
@@ -1155,17 +1161,47 @@ export function buildCouncilRoom(spec: CommitteeRoomSpec): Building {
   const daisWidth = (places - 1) * gap + 1;
   const iw = Math.max(28, daisWidth + 16);
   const ih = 19;
-  const W = iw + 2;
+  const side = OFFICE_W - 1; // the offices stand in a column down one side and share a wall with the chamber
+  const W = iw + 2 + side;
   const H = ih + 2;
 
   const kit = makeKit(W, H, carpet, "#b9cbdc", hash(spec.code));
   const { ground, over, g, o, cells, rooms, spots, staff, seats, block, spot, person, room, door } = kit;
-  const { table, chairDown, chairUp, plant, flag, cooler, tripod, picture, papers, rug, lectern } = kit;
+  const { table, chairDown, chairUp, plant, flag, cooler, tripod, picture, papers, rug, lectern, shelf, monitor } = kit;
 
-  const { ix, iy } = room("room", spec.name, 0, 0, W, H, "carpet");
+  // Three offices off the chamber. Only those a body has something to keep in are open; the rest wait behind a shut door.
+  const officeRows = [0, 6, 13];
+  const offices = COUNCIL_OFFICES.map((office, n) => {
+    const y = officeRows[n];
+    const h = n === 0 ? 7 : 8;
+    const inside = room(`office-${n}`, office.key ? office.label : "Not open yet", 0, y, OFFICE_W, h, office.key ? "wood" : "corridor");
+    return { opens: office.key, ...inside, doorY: y + Math.floor(h / 2) };
+  });
+  const { ix, iy } = room("room", spec.name, side, 0, W - side, H, "carpet");
+  for (const office of offices) if (office.opens) door(side, office.doorY);
   const centre = ix + Math.floor(iw / 2);
   door(centre - 1, H - 1, 2);
   kit.paint();
+
+  for (const office of offices) {
+    if (!office.opens) {
+      // A shut door in the shared wall, and the lights off behind it.
+      framed(g, side * T + 3, office.doorY * T - 4, 10, 22, WOOD_DARK);
+      box(g, side * T + 5, office.doorY * T + 6, 2, 2, PALETTE.gold);
+      box(g, office.ix * T, office.iy * T, office.iw * T, office.ih * T, "rgba(31, 27, 46, 0.45)");
+      continue;
+    }
+    // The statistics office: a whiteboard with a chart on the wall, shelves of binders, someone at a desk.
+    const wall = (office.iy - 1) * T;
+    framed(g, (office.ix + 1) * T, wall + 3, 3 * T, 13, PALETTE.white);
+    [5, 9, 4, 11, 7].forEach((tall, bar) => box(g, (office.ix + 1) * T + 6 + bar * 8, wall + 14 - tall, 5, tall, bar % 2 ? accent : PALETTE.gold));
+    shelf(office.ix + office.iw - 2, office.iy, 2);
+    person("librarian-0", office.ix + 2, office.iy + 2, "down");
+    table(office.ix + 1, office.iy + 3, 3, WOOD, WOOD_DARK);
+    monitor((office.ix + 1) * T + 4, (office.iy + 3) * T - 9);
+    papers((office.ix + 3) * T + 2, (office.iy + 3) * T - 3);
+    plant(office.ix, office.iy + office.ih - 1);
+  }
 
   // The wall behind the dais: the body's seal between drapes, and pictures either side.
   const wallY = (iy - 1) * T;
@@ -1266,6 +1302,7 @@ export function buildCouncilRoom(spec: CommitteeRoomSpec): Building {
     clerk: { x: (ix + 4) * T, y: (well + 1) * T - 2 },
     calendar: { x: boardX + 24, y: boardY - 3 },
     door: { tx: centre, ty: H - 1 },
+    offices: offices.filter((office) => office.opens).map((office) => ({ key: office.opens, x: office.ix * T, y: (office.iy - 1) * T, w: office.iw * T, h: (office.ih + 1) * T })),
   };
 }
 

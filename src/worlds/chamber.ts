@@ -10,6 +10,7 @@ import { fetchJson, type CongressEntry, type DataProvider } from "../data/load";
 import type { CommitteeFile, CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { stateOfCounty } from "../usa/states";
+import { wallFlags } from "../world/flags";
 import { makeSite, streets, type Layout, type Site } from "../world/layout";
 import type { WorldDef } from "./types";
 
@@ -403,6 +404,9 @@ export const chamber: WorldDef = {
     meetingsNote: (total, listed) => `${total.toLocaleString()} meetings since ${entry.since || "the record began"}; the latest ${listed} are here, and the rest are on the calendar on the wall. Re-staging seats the members now serving.`,
   },
   board: {
+    back: "← Back to the chamber",
+    // The statistics office flies the state's flag and the body's own beside the country's.
+    pictures: () => [...wallFlags(stateOfCounty(placeInAddress() ?? "")?.code, placeInAddress() ?? undefined), "land dusk"],
     measures: [
       ["introduced", "How many items were filed", 0],
       ["law", "Share that passed", 5],

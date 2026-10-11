@@ -34,6 +34,8 @@ export interface SceneHooks {
   onPlace(inside: PlaceInfo | null): void;
   /** The wall calendar in a committee's room was clicked. */
   onCalendar(code: string): void;
+  /** An office off a room was clicked: "stats" for the one where the statistics are kept. */
+  onOffice?(place: string, key: string): void;
   /** A gate to another world was clicked. */
   onTravel(world: string): void;
   onReady(): void;
@@ -1003,6 +1005,7 @@ export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks, 
     pick: (id) => scene.select({ type: "member", id }, false),
     pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place, scene.layout.enterable) }, false),
     calendar: (place) => hooks.onCalendar(place),
+    office: (place, key) => hooks.onOffice?.(place, key),
     pileInfo: (place) => ({
       count: scene.billsAt(siteKeyOfPlace(place, scene.layout.enterable)).length,
       label: place === "House" || place === "Senate" ? "on the floor" : scene.layout.piles?.[place] ?? "with the committee",

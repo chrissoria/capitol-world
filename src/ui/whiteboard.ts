@@ -24,6 +24,10 @@ export interface BoardData {
 
 /** What a world's whiteboard can plot, where it differs from the Capitol's. */
 export interface BoardConfig {
+  /** The words on the way out, where there is no map to go back to. */
+  back?: string;
+  /** The pictures on the wall, as class names (see .wb-pics in style.css), where they are not the Library of Congress's. */
+  pictures?(): string[];
   /** [key, label, the stage a row must have reached to count; 0 counts every row]. */
   measures: [BoardSpec["measure"], string, number][];
   /** Labels for the four ways to split, in the order party, time, period, area. */
@@ -124,7 +128,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     return { low, high, narrowed: all.length > 1 && (low !== all[0] || high !== all[all.length - 1]) };
   }
   const sheet = el("canvas", { role: "img" });
-  const close = el("button", { type: "button", class: "wb-close" }, "← Back to the map");
+  const close = el("button", { type: "button", class: "wb-close" }, config?.back ?? "← Back to the map");
   // The room: pictures on the wall, a plant, and a teacher at the left of the board who does the drawing.
   const teacher = el("canvas", { class: "wb-teacher", width: "28", height: "26", "aria-hidden": "true" });
   const plant = el("canvas", { class: "wb-plant", width: "14", height: "22", "aria-hidden": "true" });
@@ -182,7 +186,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
   };
 
   root.replaceChildren(
-    el("div", { class: "wb-pics", "aria-hidden": "true" }, el("i", { class: "land" }), el("i", { class: "flag" }), el("i", { class: "seal" }), el("i", { class: "land dusk" })),
+    el("div", { class: "wb-pics", "aria-hidden": "true" }, ...(config?.pictures?.() ?? ["land", "flag", "seal", "land dusk"]).map((picture) => el("i", { class: picture }))),
     el("div", { class: "wb-window", "aria-hidden": "true" }, pane),
     teacher,
     plant,

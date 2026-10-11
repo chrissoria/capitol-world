@@ -413,9 +413,9 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       .slice(0, 8)
       .map(([id, { tally, name, party }]) => {
         const member = members.get(id);
-        const label = member ? (member.state ? `${member.name} (${member.party}-${member.state})` : member.name) : name;
+        const label = member ? (member.state ? `${member.name} (${member.party ? `${member.party}-` : ""}${member.state})` : member.name) : name;
         if (!label) return null;
-        const title = el("span", { class: "row-title" }, el("span", { class: `pin ${member?.party ?? party}` }), label);
+        const title = el("span", { class: "row-title" }, cfg?.byParty === "" ? null : el("span", { class: `pin ${member?.party ?? party}` }), label);
         const sub = el("span", { class: "row-sub" }, cfg ? `${tally.introduced.toLocaleString()} ${cfg.verb} · ${cfg.reached.toLowerCase()}: ${tally.law.toLocaleString()}` : `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a ${names.house}${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`);
         if (!member) return el("li", {}, el("div", { class: "plain-row" }, title, sub)); // not in the Congress on show
         const button = el("button", { type: "button" }, title, sub);

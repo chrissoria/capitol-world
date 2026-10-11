@@ -16,6 +16,8 @@ export interface InteriorHooks {
   pileInfo(place: string): { count: number; label: string };
   /** The wall calendar in a committee room was clicked. */
   calendar(place: string): void;
+  /** An office off the room was clicked: "stats" for the one where the statistics are kept. */
+  office(place: string, key: string): void;
 }
 
 /** What to show inside: a chamber by name, or a committee's hearing room. */
@@ -255,6 +257,10 @@ export class InteriorScene extends Phaser.Scene {
       const board = this.add.zone(x - 26, y - 18, 52, 34).setOrigin(0).setDepth(DEPTH.label).setInteractive({ cursor: "pointer" });
       board.setData("calendar", true);
     }
+    for (const office of b.offices ?? []) {
+      const zone = this.add.zone(office.x, office.y, office.w, office.h).setOrigin(0).setDepth(DEPTH.label).setInteractive({ cursor: "pointer" });
+      zone.setData("office", office.key);
+    }
     this.makeMembers(members);
     this.makeVisitors();
     this.makePages();
@@ -485,6 +491,7 @@ export class InteriorScene extends Phaser.Scene {
       if (member) this.hooks.pick(member);
       else if (object.getData("floor")) this.hooks.pile(this.place);
       else if (object.getData("calendar")) this.hooks.calendar(this.place);
+      else if (object.getData("office")) this.hooks.office(this.place, object.getData("office") as string);
     });
   }
 

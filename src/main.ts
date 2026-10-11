@@ -172,6 +172,9 @@ async function main() {
     onCalendar(code) {
       calendar.open(code);
     },
+    onOffice(_place, key) {
+      if (key === "stats") panel?.openStats();
+    },
     onTravel(to) {
       switchTo(null, "push", to as Destination);
     },
