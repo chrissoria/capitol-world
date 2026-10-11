@@ -91,6 +91,8 @@ export interface Layout {
   graveyard?: { fates: string[]; site: string };
   /** Set where the world is one room, a board's or a council's own chamber: the room's code. There is no map to leave it for. */
   council?: string;
+  /** Whose flags stand in that room: the state's postal code and the place's Census code. */
+  flags?: { state?: string; place?: string };
   /** Buildings, other than the Capitol's chambers and committees, that can be gone inside: site keys. */
   enterable?: string[];
   /** What to say of a scene staged inside such a building for one item; null if there is none to stage. */

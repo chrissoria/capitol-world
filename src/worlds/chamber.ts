@@ -9,6 +9,7 @@
 import { fetchJson, type CongressEntry, type DataProvider } from "../data/load";
 import type { CommitteeFile, CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
+import { stateOfCounty } from "../usa/states";
 import { makeSite, streets, type Layout, type Site } from "../world/layout";
 import type { WorldDef } from "./types";
 
@@ -373,6 +374,7 @@ function layout(): Layout {
     conveyors: {},
     origin: SITE,
     council: ROOM,
+    flags: { state: stateOfCounty(placeInAddress() ?? "")?.code, place: placeInAddress() ?? undefined },
     piles: { [ROOM]: "on the agenda" },
     siteOf: (loc) => {
       const place = loc ? loc.split(":")[0] : null;

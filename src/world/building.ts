@@ -2,6 +2,7 @@
 // person can be, and a grid for finding a way between them. Drawn at runtime
 // like the rest of the art. The floor plan is invented; it is not the real one.
 
+import { placeBanner, stateBanner, type Banner } from "./flags";
 import type { Member } from "../data/types";
 import { PALETTE, box, canvas, framed, hash, rng } from "./art";
 
@@ -330,13 +331,14 @@ function makeKit(W: number, H: number, carpet: string, carpetDot: string, seed: 
     box(o, x + 7, y - 13, 3, 2, PALETTE.ink);
     block(tx, ty);
   };
-  const flag = (tx: number, ty: number, banner?: string) => {
+  const flag = (tx: number, ty: number, banner?: string | Banner) => {
     const x = tx * T;
     const y = ty * T;
     box(o, x + 6, y - 20, 1, 33, PALETTE.ink);
     box(o, x + 5, y - 21, 3, 2, PALETTE.gold);
     framed(o, x + 4, y + 11, 6, 4, PALETTE.goldDark);
-    if (banner) box(o, x + 7, y - 19, 8, 13, banner);
+    if (typeof banner === "function") banner(o, x + 7, y - 19);
+    else if (banner) box(o, x + 7, y - 19, 8, 13, banner);
     else {
       box(o, x + 7, y - 19, 8, 13, PALETTE.partyR);
       for (let stripe = 2; stripe < 13; stripe += 4) box(o, x + 7, y - 19 + stripe, 8, 2, PALETTE.white);
@@ -913,6 +915,8 @@ export interface CommitteeRoomSpec {
   session: { id: string; witnesses: number } | null;
   /** The room is a county board's or a city council's own chamber, not a committee's hearing room. */
   council?: boolean;
+  /** Whose flags stand in such a room beside the country's: the state's postal code, and the place's Census code. */
+  flags?: { state?: string; place?: string };
 }
 
 /** Six looks for a hearing room. Each committee always gets the same one. */
@@ -1169,10 +1173,13 @@ export function buildCouncilRoom(spec: CommitteeRoomSpec): Building {
   for (let fold = 0; fold < 9 * T; fold += 6) box(g, (centre - 4) * T + fold, wallY + 6, 1, 9, accentDark);
   framed(g, centre * T + 2, wallY + 4, 12, 12, PALETTE.gold);
   box(g, centre * T + 5, wallY + 7, 6, 6, PALETTE.goldDark);
-  for (let tx = ix + 3; tx < centre - 7; tx += 5) picture(tx, iy - 1, 2);
+  for (let tx = ix + 5; tx < centre - 7; tx += 5) picture(tx, iy - 1, 2);
   for (let tx = centre + 7; tx < ix + iw - 8; tx += 5) picture(tx, iy - 1, 2);
+  // The flags: the country's and the state's together on one side, the body's own, where it has one, on the other.
   flag(ix + 1, iy);
-  flag(ix + iw - 2, iy, accent);
+  if (spec.flags?.state) flag(ix + 3, iy, stateBanner(spec.flags.state));
+  const own = spec.flags?.place ? placeBanner(spec.flags.place) : undefined;
+  if (own) flag(ix + iw - 2, iy, own);
   // The calendar of meetings, on a board by the dais.
   const boardX = (ix + iw - 6) * T;
   const boardY = iy * T;

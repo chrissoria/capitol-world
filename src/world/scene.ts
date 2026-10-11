@@ -557,6 +557,7 @@ export class WorldScene extends Phaser.Scene {
             seats: info?.members ?? [],
             session: meeting ? { id: meeting.id, witnesses: meeting.n_witnesses } : null,
             council: this.layout.council === place,
+            flags: this.layout.flags,
           },
         });
         const note = !meeting

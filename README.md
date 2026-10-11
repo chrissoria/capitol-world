@@ -122,6 +122,11 @@ the dais, the public coming to the microphone, and the meetings, items and
 votes in the side panel. It opens with `?world=chamber&place=06073`, where the
 place is a Census code. San Diego County's Board of Supervisors is the first.
 
+Beside the country's flag the room flies its state's, and the body's own
+where it has one. They are drawn in `src/world/flags.ts`: a state's flag,
+once added there, flies in every room of that state, and a state not drawn
+yet flies a plain placeholder.
+
 A new body is data and a line, with no code: publish its
 `world/chamber.json.gz` (`build_chamber_snapshot.py` in cat-pol-datasets) and
 add its Census code to `public/usa/chambers.json`. `docs/local_worlds.md` has
