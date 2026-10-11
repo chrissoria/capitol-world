@@ -256,7 +256,7 @@ const provider: DataProvider = {
         n_total: n,
         role: `${chief ? "Chief Justice" : "Associate Justice"} · appointed by ${justice.appointed_by}, ${(chief && justice.chief_from ? justice.chief_from : justice.start).slice(0, 4)}`,
         group: chief ? "Chief Justice" : "Justice",
-        look: { suit: "#1b1b22", tie: "#1b1b22" }, // the robe
+        look: { suit: "#1b1b22", robe: true },
       };
     });
     const count = (key: (bill: Bill) => string) => bills.reduce<Record<string, number>>((all, bill) => ({ ...all, [key(bill)]: (all[key(bill)] ?? 0) + 1 }), {});

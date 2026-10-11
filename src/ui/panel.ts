@@ -606,7 +606,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
           ? `${here.length.toLocaleString()} ${active}bill${here.length === 1 ? "" : "s"} ${final ? "ended" : ""} here.`.replace("  ", " ")
           : `${here.length.toLocaleString()} ${plural(here.length)} here.`
         : !capitol ? (site.style === "gate" || site.style === "library" ? "" : `No ${words.items} here.`) : site.style === "court" ? "" : final ? "No bills ended here." : "No bills with an action in the last 30 days are here."),
-      el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${members.get(bill.sponsor)?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
+      el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, [members.get(bill.sponsor)?.name ?? (capitol ? "" : bill.status), niceDate(bill.last_action.date)].filter(Boolean).join(" · ")))),
       here.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${here.length}.`) : null,
     );
   }

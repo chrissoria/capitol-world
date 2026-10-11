@@ -752,6 +752,8 @@ export interface Look {
   hair?: string;
   tie?: string;
   style?: number;
+  /** A robe to the ankles in the coat's colour, with a white collar, in place of a suit. */
+  robe?: boolean;
 }
 
 /** A 16×24 figure built from seeded parts, seen from the front or the back. It is not a likeness. */
@@ -819,8 +821,9 @@ function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, look:
     if (style !== 3) box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
     box(ctx, ox + 8, oy + 13, 1, 6, ink);
   } else {
-    box(ctx, ox + 7, oy + 11, 2, 4, look.coat && !look.tie ? PALETTE.stoneEdge : PALETTE.white);
-    if (look.tie) {
+    if (look.robe) box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
+    else box(ctx, ox + 7, oy + 11, 2, 4, look.coat && !look.tie ? PALETTE.stoneEdge : PALETTE.white);
+    if (look.tie && !look.robe) {
       box(ctx, ox + 7, oy + 12, 2, 6, look.tie);
       box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
     }
@@ -841,8 +844,11 @@ function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, look:
   box(ctx, ox + 11, oy + 17, 2, 2, skin);
   // Legs and shoes.
   const legs = look.coat ? "#3d3f4a" : suit;
-  box(ctx, ox + 5, oy + 19, 2, 4, legs);
-  box(ctx, ox + 9, oy + 19, 2, 4, legs);
+  if (look.robe) box(ctx, ox + 4, oy + 19, 8, 3, suit);
+  else {
+    box(ctx, ox + 5, oy + 19, 2, 4, legs);
+    box(ctx, ox + 9, oy + 19, 2, 4, legs);
+  }
   box(ctx, ox + 5, oy + 22, 2, 1, ink);
   box(ctx, ox + 9, oy + 22, 2, 1, ink);
 }

@@ -671,7 +671,7 @@ export class InteriorScene extends Phaser.Scene {
       if (!agent?.member || used >= this.nameLabels.length) return;
       const last = agent.member.name.split(" ").slice(-1)[0];
       this.nameLabels[used++]
-        .setText(`${last}\n${agent.member.state}`)
+        .setText(agent.member.state ? `${last}\n${agent.member.state}` : last)
         .setPosition(agent.sprite.x, agent.sprite.y)
         .setScale(scale)
         .setAlpha(agent.sprite.alpha)

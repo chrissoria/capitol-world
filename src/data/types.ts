@@ -34,7 +34,7 @@ export interface Member {
   /** In a world without chambers, the circle the person belongs to: "President", "Cabinet", "White House". */
   group?: string;
   /** Colours for the figure, where it should suggest a particular person rather than be drawn at random. */
-  look?: { skin?: string; hair?: string; suit?: string; tie?: string; style?: number };
+  look?: { skin?: string; hair?: string; suit?: string; tie?: string; style?: number; robe?: boolean };
 }
 
 /** One term a member served, from world/members.json. */
