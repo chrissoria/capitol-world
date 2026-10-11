@@ -173,6 +173,8 @@ export interface SearchIndex {
   sponsor_names?: string[];
   /** One character per bill: why it is dead (see FATES), or "." if it is not. */
   fate?: string;
+  /** One character per item: "1" for one that can be searched for but is left out of the statistics. */
+  uncounted?: string;
 }
 
 export function locKey(loc: Loc): string {
@@ -190,6 +192,7 @@ export function billLabel(bill: { type: string; number: string }): string {
     HCONRES: "H.Con.Res.",
     SCONRES: "S.Con.Res.",
   };
+  if (bill.type === "SC" || bill.type === "APP") return `No. ${bill.number}`;
   if (bill.type === "EO") return /^\d/.test(bill.number) ? `Executive Order ${bill.number}` : "Executive order";
   return `${names[bill.type] ?? bill.type} ${bill.number}`;
 }

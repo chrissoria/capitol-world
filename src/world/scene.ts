@@ -94,7 +94,8 @@ interface SiteView {
 }
 
 export class WorldScene extends Phaser.Scene {
-  private layout!: Layout;
+  /** The map: read by the code that wires the inside of a building to its site. */
+  layout!: Layout;
   private bills = new Map<string, Bill>();
   private members = new Map<string, Member>();
   private finalSite = new Map<string, string>();
@@ -960,17 +961,18 @@ function formatDay(day: string): string {
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-const siteKeyOfPlace = (place: string) => (place === "House" || place === "Senate" ? `floor:${place}` : place === "whitehouse" ? place : `committee:${place}`);
+/** The site a place inside belongs to: a chamber's floor, a building that is entered whole, or a committee's room. */
+const siteKeyOfPlace = (place: string, own: string[] = []) => (place === "House" || place === "Senate" ? `floor:${place}` : own.includes(place) ? place : `committee:${place}`);
 
 export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks, layout?: (world: World) => Layout): WorldScene {
   const scene = new WorldScene(world, hooks, layout);
   const interior = new InteriorScene(world, {
     pick: (id) => scene.select({ type: "member", id }, false),
-    pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place) }, false),
+    pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place, scene.layout.enterable) }, false),
     calendar: (place) => hooks.onCalendar(place),
     pileInfo: (place) => ({
-      count: scene.billsAt(siteKeyOfPlace(place)).length,
-      label: place === "House" || place === "Senate" ? "on the floor" : place === "whitehouse" ? "on the Resolute desk" : "with the committee",
+      count: scene.billsAt(siteKeyOfPlace(place, scene.layout.enterable)).length,
+      label: place === "House" || place === "Senate" ? "on the floor" : scene.layout.piles?.[place] ?? "with the committee",
     }),
   });
   const game = new Phaser.Game({

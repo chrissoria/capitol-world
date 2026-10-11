@@ -56,7 +56,7 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
       ...shown.map((member) => {
         const place = el("span", { class: "where" }, whereIs(member.id));
         places.set(member.id, place);
-        const facts = [member.role, member.n_world ? (other ? `${member.n_world} ${other.items}` : `${member.n_world} active bill${member.n_world === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ");
+        const facts = [member.role, member.n_world ? (other ? `${member.n_world} ${other.items}`.replace(/^1 (\w+)s\b/, "1 $1") : `${member.n_world} active bill${member.n_world === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ");
         const button = el(
           "button",
           { type: "button" },

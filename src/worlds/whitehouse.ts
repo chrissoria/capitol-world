@@ -204,6 +204,9 @@ function layout(): Layout {
   const gate = makeSite("gate", "gate", "To Capitol Hill", "To Capitol Hill", "Center", { x: 83, y: 97, w: 10, h: 5 });
   gate.travel = "capitol";
   add(gate);
+  const toCourt = makeSite("gate-court", "gate", "To the Supreme Court", "To the Supreme Court", "Senate", { x: 100, y: 97, w: 10, h: 5 });
+  toCourt.travel = "court";
+  add(toCourt);
   return {
     sites,
     chambers: {},
@@ -211,6 +214,7 @@ function layout(): Layout {
     pool: { x: 85, y: 34, w: 6, h: 10 },
     origin: "whitehouse",
     enterable: ["whitehouse"],
+    piles: { whitehouse: "on the Resolute desk" },
     graveyard: { fates: ["r"], site: "revoked" },
     siteOf: (loc) => (loc ? "whitehouse" : null),
     ...streets(sites),
@@ -258,7 +262,10 @@ export const whitehouse: WorldDef = {
     areas: "Departments directed most",
     footnote: "Counted by the date each order was signed. A department is counted when an order names it at least twice and more than any other.",
   },
-  doors: [{ site: "gate", to: "capitol", label: "Back to Capitol Hill →" }],
+  doors: [
+    { site: "gate", to: "capitol", label: "Back to Capitol Hill →" },
+    { site: "gate-court", to: "court", label: "Go to the Supreme Court →" },
+  ],
   itemNotes(bill) {
     const links = bill.links ?? {};
     const rows = (ids: string[] = []) => ids.map((id) => ({ text: `Executive Order ${id.split("-").slice(2).join("-")}`, target: id }));

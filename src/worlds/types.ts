@@ -13,12 +13,12 @@
 //   5. add it to the list in ./index.ts.
 
 import type { CongressEntry, DataProvider } from "../data/load";
-import type { Bill, World } from "../data/types";
+import type { Bill, Member, World } from "../data/types";
 import type { StatsWords } from "../ui/stats";
 import type { BoardConfig } from "../ui/whiteboard";
 import type { Layout, Site } from "../world/layout";
 
-export type WorldKey = "capitol" | "whitehouse";
+export type WorldKey = "capitol" | "whitehouse" | "court";
 
 export interface Words {
   /** One item and several: "bill", "bills". */
@@ -36,8 +36,19 @@ export interface Words {
   kicker(site: Site): string;
   /** "Sponsor", "Signed by". */
   person: string;
-  /** What a dead item is called in the filter: "Dead bills only". */
+  /** The same heading where it depends on the item. */
+  personHeading?(bill: Bill): string;
+  /** What a dead item is called in the filter: "Dead bills only". Empty where nothing here dies. */
   deadOnly: string;
+  /** What to say in the person's place for an item with nobody behind it: an unsigned opinion, say. */
+  noPerson?(bill: Bill): string;
+  /** The name for items that belong to no area, where "Several, or none" would mislead. */
+  noArea?: string;
+  /** The heading over an item's latest step, and the words on the link to its source. */
+  actionHeading?: string;
+  readMore?(bill: Bill): string;
+  /** The line under a person's name on their card. */
+  memberLine?(member: Member): string;
   /** Names for the fates this world's items can meet, added to the shared list. */
   fates?: Record<string, { name: string; how: string }>;
   searchHint: string;
@@ -57,7 +68,9 @@ export interface WorldDef {
   periodLabel(entry: CongressEntry): string;
   words: Words;
   /** Which tabs the panel shows. */
-  tabs: { roster: boolean; rosterLabel?: string };
+  tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string };
+  /** List the overview by where the items are (the Capitol's way) rather than by their area. */
+  overviewBy?: "place";
   /** Whether the overview lists items by their area (a department, say) rather than by where they are. */
   /** What the whiteboard can plot, and how the Stats tab words its counts, when they differ from the Capitol's. */
   board?: BoardConfig;

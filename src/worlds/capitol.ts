@@ -14,7 +14,10 @@ export const capitol: WorldDef = {
   line: loadCongressLine,
   periodLabel: (entry) => `${ordinal(entry.congress)} Congress · ${entry.years[0]}–${entry.years[1] ?? "now"}`,
   tabs: { roster: true },
-  doors: [{ site: "president", to: "whitehouse", label: "Go to the White House →" }],
+  doors: [
+    { site: "president", to: "whitehouse", label: "Go to the White House →" },
+    { site: "court", to: "court", label: "Go to the Supreme Court →" },
+  ],
   words: {
     item: "bill",
     items: "bills",

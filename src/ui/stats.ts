@@ -98,7 +98,8 @@ const yearsOf = (entry: CongressEntry) => `${entry.years[0]}–${entry.years[1] 
 function toRows(data: SearchIndex, congress: number): Row[] {
   const { introduced, party, stage } = data;
   if (!introduced || !party || !stage) return [];
-  return data.id.map((id, i) => {
+  return data.id.flatMap((id, i) => {
+    if (data.uncounted?.[i] === "1") return []; // can be searched for, but is not what the numbers are about
     const type = id.split("-")[1];
     const sponsor = data.sponsor[i];
     return {
@@ -218,7 +219,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       {},
       el("div", { class: "bar-row" }, el("span", {}, label), el("span", { class: "count" }, value.toLocaleString())),
       el("div", { class: "meter" }, el("i", { style: `width:${width}%` })),
-      el("div", { class: "row-sub" }, `${percent(value, whole)} of those introduced${note}`),
+      el("div", { class: "row-sub" }, `${percent(value, whole)} of those ${cfg?.verb ?? "introduced"}${note}`),
     ), { measure, across: "party", who: "" });
   }
 
@@ -370,7 +371,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       .slice(0, 8)
       .map(([id, { tally, name, party }]) => {
         const member = members.get(id);
-        const label = member ? `${member.name} (${member.party}-${member.state})` : name;
+        const label = member ? (member.state ? `${member.name} (${member.party}-${member.state})` : member.name) : name;
         if (!label) return null;
         const title = el("span", { class: "row-title" }, el("span", { class: `pin ${member?.party ?? party}` }), label);
         const sub = el("span", { class: "row-sub" }, cfg ? `${tally.introduced.toLocaleString()} ${cfg.verb} · ${cfg.reached.toLowerCase()}: ${tally.law.toLocaleString()}` : `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a chamber${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`);

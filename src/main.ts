@@ -148,7 +148,7 @@ async function main() {
     onPlace(inside) {
       calendar.close();
       // The chambers have their own tune, and so do the committee rooms.
-      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || inside.place === "whitehouse" ? "inside" : "committee");
+      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || def.key !== "capitol" ? "inside" : "committee");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       $("fit").textContent = inside ? "Whole building" : "Whole map";

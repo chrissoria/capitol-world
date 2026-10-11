@@ -69,6 +69,8 @@ export interface Layout {
   graveyard?: { fates: string[]; site: string };
   /** Buildings, other than the Capitol's chambers and committees, that can be gone inside: site keys. */
   enterable?: string[];
+  /** What the pile of papers inside such a building is, by site key: "on the Resolute desk". */
+  piles?: Record<string, string>;
   /** The site for a location key, when the world does not use the Capitol's rules. */
   siteOf?(loc: string | null): string | null;
   lanes: { y: number; x1: number; x2: number }[];

@@ -30,6 +30,8 @@ export interface BoardConfig {
   across: [BoardSpec["across"], string][];
   /** The name of one period in a chart: "118th", "Obama". */
   group(period: number): string;
+  /** False where the items have no party: one line for all of them, and nobody to pick. */
+  parties?: boolean;
 }
 
 export interface BoardSpec {
@@ -96,6 +98,8 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
   const measure = pick("wb-measure", measures.map(([key, label]) => [key, label] as [BoardSpec["measure"], string]));
   const across = pick("wb-across", splits);
   const who = pick("wb-who", WHO);
+  const partisan = config?.parties !== false;
+  who.hidden = !partisan;
   // The years to plot, for a closer look at part of what the Stats panel has chosen.
   const fromYear = el("select", { id: "wb-from", "aria-label": "From year" });
   const toYear = el("select", { id: "wb-to", "aria-label": "To year" });
@@ -284,9 +288,9 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
       const byYear = years.length > 4;
       const key = (row: BoardRow) => row.introduced.slice(0, byYear ? 4 : 7);
       const keys = [...new Set(rows.map(key))].filter(Boolean).sort();
-      const series = spec.who ? [spec.who] : ["R", "D"];
+      const series = spec.who ? [spec.who] : partisan ? ["R", "D"] : [""];
       const points = series.map((party) => {
-        const groups = groupBy((row) => (row.party === party ? key(row) : ""));
+        const groups = groupBy((row) => (!party || row.party === party ? key(row) : ""));
         return keys.map((k) => valueOf(groups.get(k) ?? []));
       });
       const max = Math.max(1e-9, ...points.flat()) * 1.1;
@@ -295,13 +299,13 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
       series.forEach((party, s) => {
         const path = points[s].map((value, i) => [xOf(i), bottom - ((bottom - top) * value) / max] as [number, number]);
         line(path, penOf(party), 3.5);
-        summary.push(`${party}: ${points[s].map((value, i) => `${keys[i]} ${show(value)}`).join(", ")}`);
+        summary.push(`${party || "All"}: ${points[s].map((value, i) => `${keys[i]} ${show(value)}`).join(", ")}`);
       });
       const every = Math.max(1, Math.ceil(keys.length / Math.max(2, Math.floor((right - left) / 62))));
       keys.forEach((k, i) => {
         if (i % every === 0) write(byYear ? k : new Date(`${k}-15T12:00:00`).toLocaleDateString(undefined, { month: "short", year: "2-digit" }), xOf(i), bottom + 18, small * 0.9, PEN.grey);
       });
-      legend(series);
+      if (partisan) legend(series);
       return { strokes, notes, summary: summary.join(". ") };
     }
 
