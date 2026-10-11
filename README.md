@@ -47,9 +47,16 @@ they are scenery with a caption, listed in `src/world/era.ts`.
 ## Worlds
 
 Capitol Hill is one of two maps. The White House world is about executive
-orders: the White House at the head of a lawn, the departments down both sides,
-each order at the department it mostly directs, revoked orders kept apart, and a
-picker by presidency back to 1791. The White House on the Capitol map has a door
+orders. Click the White House to go inside: the President at the desk in the
+Oval Office with the orders on it, the cabinet at its table, the senior staff at
+their desks, the mess and the briefing room. The orders are listed by the
+department each mostly directs, revoked orders are kept apart, and a picker goes
+by presidency back to 1791. The agencies around the White House are placeholders
+for now, drawn as building sites. The floor plan is invented, and so is what the
+figures do; who is on the roster comes from
+[executive-branch-roster](https://huggingface.co/datasets/chrissoria/executive-branch-roster).
+The President's figure takes its hair, suit and tie colours from the person;
+nothing else about any figure is a likeness. The White House on the Capitol map has a door
 to it, and its gate leads back; the address (`?world=whitehouse&term=39`) says
 which world and period is on show.
 

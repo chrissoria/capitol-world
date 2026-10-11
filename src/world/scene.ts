@@ -251,6 +251,7 @@ export class WorldScene extends Phaser.Scene {
       this.siteViews.set(site.key, { site, label, count, major });
 
       // Clicking the building (or its dock) lists what is inside.
+      if (site.style === "construction") continue; // a placeholder: nothing to open
       const zone = this.add
         .zone(px, py, pw, (site.rect.h + 1) * TILE)
         .setOrigin(0)
@@ -467,7 +468,9 @@ export class WorldScene extends Phaser.Scene {
       const chamber = this.members.get(target.id)?.chamber;
       if (this.memberSprites.has(target.id)) this.leave();
       else if (fly && (chamber === "House" || chamber === "Senate")) this.enter(chamber);
-    } else if (target?.type === "site" && target.id.startsWith("floor:")) this.enter(target.id.endsWith("Senate") ? "Senate" : "House");
+      else if (fly && this.layout.enterable?.length && this.members.has(target.id)) this.enter(this.layout.enterable[0]);
+    } else if (target?.type === "site" && this.layout.enterable?.includes(target.id)) this.enter(target.id);
+    else if (target?.type === "site" && target.id.startsWith("floor:")) this.enter(target.id.endsWith("Senate") ? "Senate" : "House");
     else if (target?.type === "site" && target.id.startsWith("committee:")) this.enter(target.id.slice("committee:".length));
     else if (target?.type === "site" && this.layout.sites.get(target.id)?.travel) return this.hooks.onTravel(this.layout.sites.get(target.id)!.travel!);
     else if (target) this.leave();
@@ -515,8 +518,9 @@ export class WorldScene extends Phaser.Scene {
     this.view = view;
     // The scene changes over on the next frame; until then it must queue, not act on, what it is told.
     this.interior.ready = false;
-    const chamber = place === "House" || place === "Senate";
-    const site = this.layout.sites.get(chamber ? `floor:${place}` : `committee:${place}`);
+    const hall = this.layout.enterable?.includes(place) ?? false; // a building of another world, entered like a chamber
+    const chamber = place === "House" || place === "Senate" || hall;
+    const site = this.layout.sites.get(hall ? place : chamber ? `floor:${place}` : `committee:${place}`);
     if (site) {
       // Leave the map looking at this building, so coming back out lands beside it.
       const x = (site.rect.x + site.rect.w / 2) * TILE;
@@ -526,7 +530,7 @@ export class WorldScene extends Phaser.Scene {
     this.scene.sleep();
     if (chamber) {
       this.scene.launch("interior", { place });
-      this.hooks.onPlace({ place, label: `the ${place}`, note: "the comings and goings are animation" });
+      this.hooks.onPlace({ place, label: `the ${hall ? (site?.label ?? place) : place}`, note: "the comings and goings are animation" });
       return;
     }
     const label = `the ${site?.label ?? "committee room"}`;
@@ -558,10 +562,11 @@ export class WorldScene extends Phaser.Scene {
   /** Where a member's figure is right now, in a few words. */
   whereIs(memberId: string): string {
     if (this.memberSprites.has(memberId)) return "Out on the map, carrying a bill";
-    const chamber = this.members.get(memberId)?.chamber || "Capitol";
+    const hall = this.layout.enterable?.[0];
+    const chamber = this.members.get(memberId)?.chamber || (hall ? (this.layout.sites.get(hall)?.label ?? "building") : "Capitol");
     const inside = this.inside ? this.interior.whereIs(memberId) : null;
     if (!inside) return `In the ${chamber}`;
-    const building = this.inside === "House" || this.inside === "Senate" ? this.inside : (this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
+    const building = this.inside === "House" || this.inside === "Senate" ? this.inside : (this.layout.sites.get(this.inside!)?.short ?? this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
     return `${building} · ${inside}`;
   }
 
@@ -954,7 +959,7 @@ function formatDay(day: string): string {
   return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
 }
 
-const siteKeyOfPlace = (place: string) => (place === "House" || place === "Senate" ? `floor:${place}` : `committee:${place}`);
+const siteKeyOfPlace = (place: string) => (place === "House" || place === "Senate" ? `floor:${place}` : place === "whitehouse" ? place : `committee:${place}`);
 
 export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks, layout?: (world: World) => Layout): WorldScene {
   const scene = new WorldScene(world, hooks, layout);
@@ -964,7 +969,7 @@ export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks, 
     calendar: (place) => hooks.onCalendar(place),
     pileInfo: (place) => ({
       count: scene.billsAt(siteKeyOfPlace(place)).length,
-      label: place === "House" || place === "Senate" ? "on the floor" : "with the committee",
+      label: place === "House" || place === "Senate" ? "on the floor" : place === "whitehouse" ? "on the Resolute desk" : "with the committee",
     }),
   });
   const game = new Phaser.Game({

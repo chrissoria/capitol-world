@@ -99,6 +99,8 @@ function roofColors(entry: Site): [string, string] {
       return ["#8cc0aa", "#64997f"]; // weathered copper
     case "department":
       return ["#4f6f9c", "#3a557c"];
+    case "construction":
+      return ["#c9b377", "#a8935c"];
     default:
       if (entry.wing === "Senate") return [PALETTE.senate, PALETTE.senateDark];
       if (entry.wing === "House") return [PALETTE.house, PALETTE.houseDark];
@@ -376,6 +378,37 @@ function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   }
 }
 
+/** A building going up: a frame of girders behind scaffolding, a hoarding, a crane. A placeholder. */
+function drawConstruction(ctx: CanvasRenderingContext2D, entry: Site) {
+  const { x, y, w, h } = scale(entry.rect);
+  const steel = PALETTE.steelDark;
+  // The frame.
+  for (let gx = x + 6; gx <= x + w - 6; gx += 20) box(ctx, gx, y + 8, 3, h - 16, steel);
+  for (let gy = y + 8; gy < y + h - 12; gy += 18) box(ctx, x + 6, gy, w - 12, 3, steel);
+  for (let gx = x + 6; gx + 20 <= x + w - 6; gx += 40) {
+    for (let i = 0; i < 16; i++) box(ctx, gx + 3 + i, y + 11 + i, 2, 1, PALETTE.steel);
+  }
+  // Scaffold boards and poles.
+  for (let gy = y + 24; gy < y + h - 14; gy += 18) box(ctx, x + 2, gy, w - 4, 2, PALETTE.wood);
+  for (let gx = x + 2; gx <= x + w - 3; gx += 12) box(ctx, gx, y + 14, 1, h - 26, PALETTE.woodDark);
+  // The hoarding along the street, in warning stripes.
+  framed(ctx, x, y + h - 14, w, 14, PALETTE.yellow);
+  for (let sx = x + 2; sx < x + w - 6; sx += 12) {
+    for (let i = 0; i < 12; i++) box(ctx, sx + i / 2, y + h - 13 + i, 4, 1, PALETTE.ink);
+  }
+  // A crane.
+  box(ctx, x + w - 12, y - 16, 3, h, PALETTE.orange);
+  box(ctx, x + w - 44, y - 16, 40, 3, PALETTE.orange);
+  box(ctx, x + w - 40, y - 13, 1, 14, PALETTE.ink);
+  framed(ctx, x + w - 44, y + 1, 9, 6, PALETTE.steel);
+  // Cones by the gate.
+  for (const cx of [x + 8, x + 22]) {
+    box(ctx, cx + 2, y + h + 2, 2, 4, PALETTE.orange);
+    box(ctx, cx + 1, y + h + 6, 4, 3, PALETTE.orange);
+    box(ctx, cx, y + h + 9, 6, 2, PALETTE.ink);
+  }
+}
+
 /** A gateway in a hedge, with the road running through it: the way to another world. */
 function drawGate(ctx: CanvasRenderingContext2D, entry: Site) {
   const { x, y, w, h } = scale(entry.rect);
@@ -594,15 +627,18 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
     block(entry.rect, 1);
     block({ x: entry.dock.x, y: entry.dock.y, w: entry.dock.w, h: 1 });
     const dock = { x: entry.dock.x * TILE, y: entry.dock.y * TILE, w: entry.dock.w * TILE };
-    box(ctx, dock.x, dock.y + 2, dock.w, TILE - 2, PALETTE.stone);
-    box(ctx, dock.x, dock.y + TILE - 1, dock.w, 1, PALETTE.stoneEdge);
-    box(ctx, dock.x, dock.y + 2, dock.w, 1, PALETTE.stoneEdge);
+    if (entry.style !== "construction") {
+      box(ctx, dock.x, dock.y + 2, dock.w, TILE - 2, PALETTE.stone);
+      box(ctx, dock.x, dock.y + TILE - 1, dock.w, 1, PALETTE.stoneEdge);
+      box(ctx, dock.x, dock.y + 2, dock.w, 1, PALETTE.stoneEdge);
+    }
     if (entry.style === "chamber") drawChamber(ctx, entry);
     else if (entry.style === "conference") drawConference(ctx, entry);
     else if (entry.style === "whitehouse") drawWhiteHouse(ctx, entry);
     else if (entry.style === "memorial") drawMemorial(ctx, entry);
     else if (entry.style === "library") drawLibrary(ctx, entry);
     else if (entry.style === "gate") drawGate(ctx, entry);
+    else if (entry.style === "construction") drawConstruction(ctx, entry);
     else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }
@@ -658,15 +694,22 @@ export interface Look {
   party: string | null;
   coat?: string;
   cap?: string;
+  /** Chosen rather than drawn at random, for a figure that should suggest a particular person. */
+  skin?: string;
+  hair?: string;
+  tie?: string;
+  style?: number;
 }
 
 /** A 16×24 figure built from seeded parts, seen from the front or the back. It is not a likeness. */
 function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, look: Look, back = false) {
   const random = rng(hash(look.seed));
-  const skin = SKIN[Math.floor(random() * SKIN.length)];
-  const hair = HAIR[Math.floor(random() * HAIR.length)];
-  const suit = look.coat ?? SUIT[Math.floor(random() * SUIT.length)];
-  const style = Math.floor(random() * 5);
+  // The random draws are made even when a colour is given, so every other figure stays as it was.
+  const drawn = [SKIN[Math.floor(random() * SKIN.length)], HAIR[Math.floor(random() * HAIR.length)], SUIT[Math.floor(random() * SUIT.length)]];
+  const skin = look.skin ?? drawn[0];
+  const hair = look.hair ?? drawn[1];
+  const suit = look.coat ?? drawn[2];
+  const style = look.style ?? Math.floor(random() * 5);
   const ink = PALETTE.ink;
 
   // Outline silhouette.
@@ -723,7 +766,11 @@ function drawFigure(ctx: CanvasRenderingContext2D, ox: number, oy: number, look:
     if (style !== 3) box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
     box(ctx, ox + 8, oy + 13, 1, 6, ink);
   } else {
-    box(ctx, ox + 7, oy + 11, 2, 4, look.coat ? PALETTE.stoneEdge : PALETTE.white);
+    box(ctx, ox + 7, oy + 11, 2, 4, look.coat && !look.tie ? PALETTE.stoneEdge : PALETTE.white);
+    if (look.tie) {
+      box(ctx, ox + 7, oy + 12, 2, 6, look.tie);
+      box(ctx, ox + 6, oy + 11, 4, 1, PALETTE.white);
+    }
     if (look.party !== null) {
       const pin = partyColor(look.party);
       if (look.party === "R") box(ctx, ox + 4, oy + 13, 3, 3, pin);
@@ -765,7 +812,10 @@ export function drawFigures(looks: { key: string; look: Look }[]): { canvas: HTM
 }
 
 export function drawMembers(members: Member[]): { canvas: HTMLCanvasElement; frames: Map<string, Rect> } {
-  return drawFigures(members.map((member) => ({ key: member.id, look: { seed: member.id, party: member.party } })));
+  return drawFigures(members.map((member) => ({
+    key: member.id,
+    look: { seed: member.id, party: member.party || null, ...(member.look ? { ...member.look, coat: member.look.suit } : {}) },
+  })));
 }
 
 // ── Small props ──────────────────────────────────────────────────────────────

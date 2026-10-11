@@ -1116,6 +1116,186 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
   };
 }
 
+/**
+ * The West Wing, loosely: the Oval Office between the Cabinet Room and the staff
+ * offices, with the mess and the briefing room across the corridor. The plan is
+ * invented, like the chambers'; who sits where comes from the roster.
+ */
+export function buildWhiteHouse(members: Member[]): Building {
+  const W = 58;
+  const H = 34;
+  const kit = makeKit(W, H, "#efe3c2", "#dccf9f", hash("whitehouse"));
+  const { ground, over, g, cells, rooms, spots, staff, seats, block, spot, person, room, door } = kit;
+  const { table, chairDown, chairUp, sofa, shelf, plant, lectern, flag, cooler, tripod, rug, picture, windowAt, papers, monitor, bust } = kit;
+
+  const cabinetRoom = room("cabinet", "Cabinet Room", 0, 0, 21, 14, "blue");
+  const oval = room("oval", "Oval Office", 20, 0, 18, 14, "carpet");
+  const offices = room("offices", "West Wing Offices", 37, 0, 21, 14, "wood");
+  const mess = room("mess", "Navy Mess", 0, 17, 19, 17, "tile");
+  const press = room("press", "Press Briefing Room", 39, 17, 19, 17, "blue");
+  door(9, 13, 2);
+  door(28, 13, 2);
+  door(46, 13, 2);
+  door(8, 17, 2);
+  door(47, 17, 2);
+  door(28, H - 1, 2);
+  kit.paint();
+
+  const president = members.find((member) => member.group === "President") ?? members[0];
+  const cabinet = members.filter((member) => member !== president && (member.group === "Cabinet" || member.group === "Cabinet-level"));
+  const others = members.filter((member) => member !== president && !cabinet.includes(member));
+
+  // ── The Oval Office: the desk under the windows, two sofas across a rug with the seal. ──
+  {
+    const { ix, iy, iw } = oval;
+    for (const tx of [ix + 4, ix + 7, ix + 10]) windowAt(tx, iy - 1);
+    flag(ix + 2, iy);
+    flag(ix + iw - 3, iy, PALETTE.gold);
+    rug(ix + 3, iy + 5, 10, 6, "#2f4a7a", PALETTE.gold);
+    const sealX = (ix + 8) * T;
+    const sealY = (iy + 8) * T;
+    box(g, sealX - 9, sealY - 7, 18, 14, PALETTE.gold);
+    box(g, sealX - 7, sealY - 5, 14, 10, "#2f4a7a");
+    box(g, sealX - 3, sealY - 2, 6, 4, PALETTE.gold);
+    table(ix + 6, iy + 2, 4, WALNUT, "#4f2f18");
+    papers((ix + 6) * T + 4, (iy + 2) * T - 3);
+    chairDown(ix + 8, iy + 1, LEATHER_DARK);
+    if (president) seats.set(president.id, spot("seat", ix + 8, iy + 1, "down", "oval", { owner: president.id }));
+    for (const tx of [ix + 6, ix + 9]) {
+      chairUp(tx, iy + 4);
+      spot("chat", tx, iy + 4, "up", "oval");
+    }
+    for (const tx of [ix + 2, ix + 11]) {
+      sofa(tx, iy + 7, 3);
+      for (let i = 0; i < 3; i++) spot("sofa", tx + i, iy + 7, "down", "oval");
+    }
+    bust(ix, iy + 3);
+    plant(ix + iw - 1, iy + 3);
+    plant(ix, iy + 11);
+    picture(ix + 13, iy - 1, 1);
+  }
+
+  // ── The Cabinet Room: one long table, the secretaries along both sides. ──
+  {
+    const { ix, iy, iw } = cabinetRoom;
+    const row = iy + 5;
+    table(ix + 3, row, 13, WALNUT, "#4f2f18");
+    const places: { tx: number; ty: number; face: Face }[] = [];
+    for (let i = 0; i < 13; i++) {
+      // From the middle outwards, so a small cabinet still sits together.
+      const tx = ix + 9 + (i % 2 ? -1 : 1) * Math.ceil(i / 2);
+      places.push({ tx, ty: row - 1, face: "down" }, { tx, ty: row + 1, face: "up" });
+    }
+    places.forEach(({ tx, ty, face }, index) => {
+      if (face === "down") chairDown(tx, ty, LEATHER_DARK);
+      else chairUp(tx, ty, LEATHER_DARK, LEATHER);
+      const member = cabinet[index];
+      if (member) seats.set(member.id, spot("seat", tx, ty, face, "cabinet", { owner: member.id }));
+      else spot("hearing", tx, ty, face, "cabinet");
+    });
+    for (let tx = ix + 3; tx < ix + 16; tx += 3) papers(tx * T + 3, row * T - 3);
+    flag(ix + 1, iy);
+    flag(ix + iw - 2, iy, PALETTE.gold);
+    for (const tx of [ix + 5, ix + 9, ix + 13]) picture(tx, iy - 1, 2);
+    shelf(ix + 1, iy + 11, 3);
+    spot("read", ix + 2, iy + 10, "down", "cabinet");
+    plant(ix + iw - 1, iy + 11);
+  }
+
+  // ── The West Wing offices: a desk each for the senior staff. ──
+  {
+    const { ix, iy, iw } = offices;
+    let next = 0;
+    for (const row of [iy + 2, iy + 6, iy + 10]) {
+      for (let tx = ix + 1; tx + 2 <= ix + iw - 1; tx += 4) {
+        table(tx, row, 2, "#e9e2cf", "#b9b1a0");
+        monitor(tx * T + 8, row * T - 9);
+        chairDown(tx, row - 1, "#3d3f4a");
+        const member = others[next++];
+        if (member) seats.set(member.id, spot("seat", tx, row - 1, "down", "offices", { owner: member.id }));
+        else spot("desk", tx, row - 1, "down", "offices");
+      }
+    }
+    for (const tx of [ix + 3, ix + 9, ix + 15]) windowAt(tx, iy - 1);
+    cooler(ix + iw - 1, iy + 12 - 1);
+    spot("chat", ix + iw - 3, iy + 11, "down", "offices");
+  }
+
+  // ── The mess: a counter and six tables. ──
+  {
+    const { ix, iy, iw } = mess;
+    table(ix + 2, iy + 1, 9, "#e9e2cf", "#b9b1a0");
+    person("server-0", ix + 4, iy, "down");
+    person("server-1", ix + 8, iy, "down");
+    for (let i = 0; i < 4; i++) spot("queue", ix + 3 + i * 2, iy + 2, "up", "mess");
+    for (const row of [iy + 6, iy + 11]) {
+      for (const cx of [ix + 3, ix + 8, ix + 13]) {
+        table(cx - 1, row, 3);
+        chairDown(cx, row - 1);
+        chairUp(cx, row + 1);
+        spot("eat", cx, row - 1, "down", "mess", { table: row });
+        spot("eat", cx, row + 1, "up", "mess", { table: row });
+      }
+    }
+    cooler(ix + iw - 1, iy + 1);
+    plant(ix, iy + 13);
+  }
+
+  // ── The briefing room: the lectern, the press in rows, the cameras at the back. ──
+  {
+    const { ix, iy } = press;
+    const wallY = (iy - 1) * T;
+    framed(g, (ix + 4) * T, wallY + 3, 9 * T, 13, "#2f4a7a");
+    box(g, (ix + 8) * T + 2, wallY + 5, 12, 9, PALETTE.white);
+    box(g, (ix + 8) * T + 5, wallY + 7, 6, 5, "#2f4a7a");
+    lectern(ix + 8, iy + 2);
+    spot("press", ix + 8, iy + 1, "down", "press");
+    flag(ix + 3, iy);
+    flag(ix + 13, iy, PALETTE.gold);
+    let reporter = 0;
+    for (const row of [iy + 6, iy + 8, iy + 10]) {
+      for (let tx = ix + 3; tx <= ix + 13; tx++) {
+        if (tx === ix + 8) continue; // the aisle
+        chairUp(tx, row, "#3d3f4a", "#56607a");
+        if ((tx * 5 + row * 3) % 4 === 0) staff.push({ frame: `reporter-${reporter++ % 6}`, tx, ty: row, dx: 0, face: "up" });
+      }
+    }
+    tripod(ix + 2, iy + 13);
+    tripod(ix + 14, iy + 13);
+    block(ix + 2, iy + 13);
+    block(ix + 14, iy + 13);
+  }
+
+  // ── The corridor and the lobby. ──
+  for (const [tx, ty] of [[5, 15], [15, 15], [24, 15], [33, 15], [42, 15], [52, 15], [24, 22], [33, 22], [28, 27]] as const) spot("chat", tx, ty, "down", "corridor");
+  sofa(21, 20, 3);
+  for (let i = 0; i < 3; i++) spot("sofa", 21 + i, 20, "down", "corridor");
+  sofa(34, 20, 3);
+  for (let i = 0; i < 3; i++) spot("sofa", 34 + i, 20, "down", "corridor");
+  plant(20, 30);
+  plant(37, 30);
+  bust(20, 18);
+  bust(37, 18);
+  person("guard-0", 26, H - 3, "up");
+  rug(26, 24, 6, 5, "#8d2f2f", PALETTE.gold);
+
+  return {
+    key: "whitehouse",
+    wing: "House",
+    w: W,
+    h: H,
+    ground,
+    over,
+    rooms,
+    spots,
+    seats,
+    staff,
+    pages: 0,
+    cells,
+    clerk: { x: (oval.ix + 7) * T + 6, y: (oval.iy + 2) * T - 2 },
+  };
+}
+
 const NEIGHBOURS = [0, 1, 0, -1];
 
 /** Tiles to walk through from one place to another, corners only. Null when there is no way. */

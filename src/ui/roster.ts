@@ -4,13 +4,13 @@
 import type { Member, World } from "../data/types";
 import { add, el, put } from "./dom";
 
-export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void) {
+export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void, other?: { title: string; items: string }) {
   const select = (id: string, options: [string, string][]) => {
     const node = el("select", { id });
     for (const [value, label] of options) node.append(el("option", { value }, label));
     return node;
   };
-  const search = el("input", { type: "search", id: "r-search", placeholder: "Name or state", autocomplete: "off" });
+  const search = el("input", { type: "search", id: "r-search", placeholder: other ? "Name or post" : "Name or state", autocomplete: "off" });
   const chamber = select("r-chamber", [["", "Both chambers"], ["House", "House"], ["Senate", "Senate"]]);
   const party = select("r-party", [["", "Any party"], ["D", "Democrats"], ["R", "Republicans"], ["I", "Independents"]]);
   const sort = select("r-sort", [["name", "Sort by last name"], ["state", "Sort by state"], ["bills", "Sort by active bills"]]);
@@ -18,12 +18,14 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
   const list = el("ul", { class: "list" });
   add(
     section,
-    el("h2", {}, "Roster"),
-    el("p", { class: "note" }, "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the member’s real whereabouts."),
-    el("label", { for: "r-search" }, "Find a member"),
+    el("h2", {}, other?.title ?? "Roster"),
+    el("p", { class: "note" }, other
+      ? "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the person’s real whereabouts. The cabinet comes from Senate confirmations; the White House staff from Wikidata, which is less authoritative and not complete."
+      : "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the member’s real whereabouts."),
+    el("label", { for: "r-search" }, other ? "Find someone" : "Find a member"),
     search,
-    el("div", { class: "row-of-selects" }, chamber, party),
-    sort,
+    // A world without chambers or party seats has nothing to choose here.
+    ...(other ? [] : [el("div", { class: "row-of-selects" }, chamber, party), sort]),
     summary,
     list,
   );
@@ -54,18 +56,18 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
       ...shown.map((member) => {
         const place = el("span", { class: "where" }, whereIs(member.id));
         places.set(member.id, place);
-        const facts = [member.role, member.n_world ? `${member.n_world} active bill${member.n_world === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+        const facts = [member.role, member.n_world ? (other ? `${member.n_world} ${other.items}` : `${member.n_world} active bill${member.n_world === 1 ? "" : "s"}`) : ""].filter(Boolean).join(" · ");
         const button = el(
           "button",
           { type: "button" },
-          el("span", { class: "row-title" }, el("span", { class: `pin ${member.party}` }), `${member.name} (${seat(member)})`),
+          el("span", { class: "row-title" }, el("span", { class: `pin ${member.party}` }), `${member.name}${member.state ? ` (${seat(member)})` : ""}`),
           el("span", { class: "row-sub" }, place, facts ? ` · ${facts}` : ""),
         );
         button.addEventListener("click", () => pick(member.id));
         return el("li", {}, button);
       }),
     );
-    summary.textContent = `${shown.length.toLocaleString()} of ${world.members.length.toLocaleString()} members.`;
+    summary.textContent = `${shown.length.toLocaleString()} of ${world.members.length.toLocaleString()} ${other ? "people" : "members"}.`;
   }
 
   for (const node of [chamber, party, sort]) node.addEventListener("change", render);

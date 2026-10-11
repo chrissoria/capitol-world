@@ -92,7 +92,11 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   const members = new Map(world.members.map((member) => [member.id, member]));
   const bills = new Map(world.bills.map((bill) => [bill.id, bill]));
   const tabs = [...document.querySelectorAll<HTMLButtonElement>("#tabs button")];
-  for (const tab of tabs) if (tab.dataset.tab === "roster" && !def.tabs.roster) tab.hidden = true;
+  for (const tab of tabs) {
+    if (tab.dataset.tab !== "roster") continue;
+    tab.hidden = !def.tabs.roster;
+    if (def.tabs.rosterLabel) tab.textContent = def.tabs.rosterLabel;
+  }
   const sections = {
     inspect: document.getElementById("tab-inspect")!,
     search: document.getElementById("tab-search")!,
@@ -149,6 +153,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     | { kind: "overview" }
     | { kind: "stage"; stage: string }
     | { kind: "cause"; cause: string }
+    | { kind: "area"; area: string }
     | { kind: "target"; target: Target }
     | { kind: "outside"; id: string }
     | { kind: "tab"; tab: TabName };
@@ -176,6 +181,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     if (view.kind === "tab") name = tabs.find((tab) => tab.dataset.tab === view.tab)?.textContent ?? "Back";
     else if (view.kind === "stage") name = STAGES[view.stage] ?? "Stage";
     else if (view.kind === "cause") name = FATES[view.cause]?.name ?? "Memorial";
+    else if (view.kind === "area") name = view.area;
     else if (view.kind === "outside") {
       const [, type, number] = view.id.split("-");
       name = billLabel({ type: type.toUpperCase(), number });
@@ -194,6 +200,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     actions.select(null);
     if (view.kind === "stage") showStage(view.stage);
     else if (view.kind === "cause") showCause(view.cause);
+    else if (view.kind === "area") showArea(view.area);
     else if (view.kind === "outside") void loadSearch().then((index) => showOutside(view.id, index));
   }
 
@@ -254,11 +261,18 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   function showOverview() {
     const byStage = new Map<string, number>();
     for (const bill of world.bills) byStage.set(bill.loc.kind, (byStage.get(bill.loc.kind) ?? 0) + 1);
-    const rows = Object.keys(STAGES).filter((kind) => byStage.get(kind)).map((kind) => {
+    const byArea = new Map<string, number>();
+    for (const bill of world.bills) byArea.set(bill.policy_area || "Several, or none", (byArea.get(bill.policy_area || "Several, or none") ?? 0) + 1);
+    const areaRows = [...byArea.entries()].sort((a, b) => b[1] - a[1]).map(([area, n]) => {
+      const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, area), el("span", { class: "count" }, String(n))));
+      button.addEventListener("click", () => showArea(area));
+      return el("li", {}, button);
+    });
+    const rows = capitol ? Object.keys(STAGES).filter((kind) => byStage.get(kind)).map((kind) => {
       const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, STAGES[kind]), el("span", { class: "count" }, String(byStage.get(kind)))));
       button.addEventListener("click", () => showStage(kind));
       return el("li", {}, button);
-    });
+    }) : areaRows;
     put(sections.inspect, 
       el("h2", {}, words.overview(world).title),
       el("p", {}, words.overview(world).lead),
@@ -278,6 +292,20 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h3", {}, words.overview(world).where),
       el("ul", { class: "list" }, ...rows),
       el("p", { class: "note" }, final || !capitol ? `Pick one to list its ${words.items}.` : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
+    );
+  }
+
+  /** Every item of one area: the orders that mostly direct one department, say. */
+  function showArea(area: string) {
+    visit({ kind: "area", area });
+    const inArea = world.bills.filter((bill) => (bill.policy_area || "Several, or none") === area).sort((a, b) => b.last_action.date.localeCompare(a.last_action.date));
+    put(sections.inspect,
+      backButton(),
+      el("div", { class: "kicker" }, Items),
+      el("h2", {}, area),
+      el("p", {}, `${inArea.length.toLocaleString()} ${plural(inArea.length)}.`),
+      el("ul", { class: "list" }, ...inArea.slice(0, 200).map((bill) => billRow(bill, `${bill.status} · ${niceDate(bill.last_action.date)}`))),
+      inArea.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${inArea.length}.`) : null,
     );
   }
 
@@ -357,9 +385,13 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       backButton(),
       el("div", { class: "kicker" }, member.role || (member.chamber === "Senate" ? "Senator" : "Representative")),
       el("h2", {}, pin(member.party), member.name),
-      el("p", {}, el("span", { class: "chip" }, partyName(member.party)), el("span", { class: "chip" }, member.chamber === "House" && member.district ? `${member.state}-${member.district}` : member.state)),
+      capitol
+        ? el("p", {}, el("span", { class: "chip" }, partyName(member.party)), el("span", { class: "chip" }, member.chamber === "House" && member.district ? `${member.state}-${member.district}` : member.state))
+        : member.party ? el("p", {}, el("span", { class: "chip" }, partyName(member.party))) : null,
       el("p", {}, !capitol
-        ? `${member.n_total.toLocaleString()} executive ${plural(member.n_total)} signed.`
+        ? member.group && member.group !== "President"
+          ? (member.n_total ? `${member.n_total.toLocaleString()} ${plural(member.n_total)} of this presidency mostly direct this person’s department.` : "")
+          : `${member.n_total.toLocaleString()} executive ${plural(member.n_total)} signed.`
         : final
           ? `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} in the ${congressName}.`
           : `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this Congress, ${theirs.length} with an action in the last 30 days.`),
@@ -707,7 +739,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
 
   const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats);
 
-  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }));
+  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: words.items });
 
   // ── About ──────────────────────────────────────────────────────────────────
   // Out of the way: a small link under the title opens it.

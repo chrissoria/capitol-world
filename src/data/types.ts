@@ -31,6 +31,10 @@ export interface Member {
   n_world: number;
   n_total: number;
   role?: string;
+  /** In a world without chambers, the circle the person belongs to: "President", "Cabinet", "White House". */
+  group?: string;
+  /** Colours for the figure, where it should suggest a particular person rather than be drawn at random. */
+  look?: { skin?: string; hair?: string; suit?: string; tie?: string; style?: number };
 }
 
 export interface Committee {

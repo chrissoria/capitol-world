@@ -4,7 +4,7 @@
 import Phaser from "phaser";
 import type { Member, World } from "../data/types";
 import { PALETTE, SPRITE_H, box, canvas, drawFigures, framed, type Look } from "./art";
-import { T, buildBuilding, buildCommitteeRoom, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
+import { T, buildBuilding, buildCommitteeRoom, buildWhiteHouse, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
 import { panZoom, type PanZoom } from "./camera";
 
 export interface InteriorHooks {
@@ -123,7 +123,7 @@ export class InteriorScene extends Phaser.Scene {
   private committee: CommitteeRoomSpec | undefined;
   private speaker: Agent | null = null;
   private nextSpeakerAt = 0;
-  private plans = new Map<Wing, Building>();
+  private plans = new Map<string, Building>();
   private b!: Building;
   private agents = new Map<string, Agent>();
   private byKind = new Map<SpotKind, Spot[]>();
@@ -166,6 +166,14 @@ export class InteriorScene extends Phaser.Scene {
       const spec = { ...this.committee, seats: this.committee.seats.filter((seat) => known.has(seat.id)) };
       plan = buildCommitteeRoom(spec);
       members = spec.session ? spec.seats.map((seat) => known.get(seat.id)!) : [];
+    } else if (this.place === "whitehouse") {
+      // Everyone on the roster has a seat: the President in the Oval Office, the cabinet at its table, the staff at their desks.
+      members = this.world.members;
+      plan = this.plans.get("whitehouse");
+      if (!plan) {
+        plan = buildWhiteHouse(members);
+        this.plans.set("whitehouse", plan);
+      }
     } else {
       members = this.world.members.filter((member) => member.chamber === wing);
       plan = this.plans.get(wing);

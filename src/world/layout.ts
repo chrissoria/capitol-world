@@ -34,7 +34,8 @@ export type SiteStyle =
   | "memorial"
   | "library"
   | "department"
-  | "gate";
+  | "gate"
+  | "construction";
 
 export interface Site {
   key: string;
@@ -61,6 +62,8 @@ export interface Layout {
   origin?: string;
   /** Items with one of these fates are laid at this site instead of where they stood. */
   graveyard?: { fates: string[]; site: string };
+  /** Buildings, other than the Capitol's chambers and committees, that can be gone inside: site keys. */
+  enterable?: string[];
   /** The site for a location key, when the world does not use the Capitol's rules. */
   siteOf?(loc: string | null): string | null;
   lanes: { y: number; x1: number; x2: number }[];

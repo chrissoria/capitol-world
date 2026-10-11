@@ -57,7 +57,8 @@ export interface WorldDef {
   periodLabel(entry: CongressEntry): string;
   words: Words;
   /** Which tabs the panel shows. */
-  tabs: { roster: boolean };
+  tabs: { roster: boolean; rosterLabel?: string };
+  /** Whether the overview lists items by their area (a department, say) rather than by where they are. */
   /** What the whiteboard can plot, and how the Stats tab words its counts, when they differ from the Capitol's. */
   board?: BoardConfig;
   stats?: StatsWords;

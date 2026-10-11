@@ -8,6 +8,26 @@ import { MAP_W, makeSite, streets, type Layout, type Rect, type Site } from "../
 import type { WorldDef } from "./types";
 
 const FILE = "https://huggingface.co/datasets/chrissoria/executive-orders/resolve/main/world/whitehouse.json.gz";
+const ROSTER = "https://huggingface.co/datasets/chrissoria/executive-branch-roster/resolve/main/world/roster.json";
+
+/** world/roster.json: who serves in the sitting administration (build_executive_roster.py). */
+interface RosterFile {
+  term_start: string;
+  people: { name: string; position: string; group: string; department: string; status: string; since: string; vote: string; source: string; url: string }[];
+}
+
+let rosterFile: Promise<RosterFile | null> | undefined;
+/** The roster, or null when it cannot be read: the map then has the President alone. */
+const loadRoster = () => (rosterFile ??= fetchJson<RosterFile>(ROSTER).catch(() => null));
+
+/** Colours that suggest a recent president without drawing a likeness: hair, suit and tie, and nothing exaggerated. */
+const LOOKS: Record<string, Member["look"]> = {
+  "Donald J. Trump": { skin: "#f0c29a", hair: "#e9c46a", suit: "#27324f", tie: "#d8433b", style: 2 },
+  "Joseph R. Biden, Jr.": { skin: "#f2cfb0", hair: "#ececf0", suit: "#27324f", tie: "#3a6fd8", style: 2 },
+  "Barack Obama": { skin: "#8f5c3c", hair: "#4a4a50", suit: "#2b2b33", tie: "#3a6fd8", style: 4 },
+  "George W. Bush": { skin: "#eebd97", hair: "#b9b9c0", suit: "#27324f", tie: "#d8433b", style: 2 },
+  "William J. Clinton": { skin: "#f2cfb0", hair: "#dcdce4", suit: "#27324f", tie: "#d8433b", style: 2 },
+};
 
 interface OrdersFile {
   schema: number;
@@ -62,7 +82,7 @@ const provider: DataProvider = {
         cosponsors: 0,
         policy_area: department?.name ?? "",
         status: revoked ? "Revoked" : "Signed",
-        loc: department ? { kind: "dept" as never, chamber: "", committee: department.code } : { kind: "whitehouse" as never, chamber: "", committee: "" },
+        loc: { kind: "whitehouse" as never, chamber: "", committee: "" },
         last_action: { date: data.date[k], text: `Signed by ${plainName(president.name)}.` },
         introduced: data.date[k],
         summary: data.excerpt[k],
@@ -79,8 +99,18 @@ const provider: DataProvider = {
     const events = bills
       .filter((bill) => bill.introduced >= eventsSince && !bill.fate)
       .reverse()
-      .map((bill, seq) => ({ bill: bill.id, date: bill.introduced, seq, from: null, to: bill.loc.committee ? `dept:${bill.loc.committee}` : "whitehouse", text: bill.title.slice(0, 140), actor: null, actor_role: null }));
-    const member: Member = { id: presidentId(p), name: plainName(president.name), party: pinOf(president.party), state: "", district: null, chamber: "", n_world: bills.length, n_total: bills.length, role: `President · ${president.party === "None" ? "no party" : president.party}` };
+      .map((bill, seq) => ({ bill: bill.id, date: bill.introduced, seq, from: null, to: "whitehouse", text: bill.title.slice(0, 140), actor: null, actor_role: null }));
+    const member: Member = { id: presidentId(p), name: plainName(president.name), party: pinOf(president.party), state: "", district: null, chamber: "", n_world: bills.length, n_total: bills.length, role: `President · ${president.party === "None" ? "no party" : president.party}`, group: "President", look: LOOKS[plainName(president.name)] };
+    // The cabinet and the senior staff are known only for the administration now in office.
+    const roster = p === last ? await loadRoster() : null;
+    const staffed = new Map<string, Member>();
+    for (const person of roster?.people ?? []) {
+      if (person.status !== "serving") continue;
+      const directed = person.department ? bills.filter((bill) => bill.policy_area && data.departments.find((d) => d.code === person.department)?.name === bill.policy_area).length : 0;
+      const known = staffed.get(person.name);
+      if (known) known.role = `${known.role} · ${person.position}`; // one figure for someone with two posts
+      else staffed.set(person.name, { id: `staff-${person.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, name: person.name, party: "", state: "", district: null, chamber: "", n_world: directed, n_total: directed, role: person.position, group: person.group });
+    }
     const count = (key: (bill: Bill) => string) => bills.reduce<Record<string, number>>((all, bill) => ({ ...all, [key(bill)]: (all[key(bill)] ?? 0) + 1 }), {});
     const revokedCount = bills.filter((bill) => bill.fate).length;
     return {
@@ -90,7 +120,7 @@ const provider: DataProvider = {
       congress: p,
       window: { world_since: president.first, events_since: eventsSince },
       counts: { total: bills.length, world: bills.length, events: events.length, guessed_locations: 0, by_status: count((b) => b.status), by_kind: count((b) => b.loc.kind), dead: (revokedCount ? { r: revokedCount } : {}) as Record<string, number> },
-      members: [member],
+      members: [member, ...staffed.values()],
       committees: data.departments.map((d) => ({ code: d.code, name: d.name, chamber: "", n_bills: bills.filter((b) => b.loc.committee === d.code).length })),
       bills,
       events,
@@ -139,21 +169,24 @@ const provider: DataProvider = {
 let names: string[] = [];
 void load().then((data) => (names = data.presidents.map((president) => president.name)), () => undefined);
 
-/** The White House at the head of a lawn, the departments down both sides, and the way back to Capitol Hill. */
-function layout(world: World): Layout {
+// The agencies around the White House. They are placeholders for now, drawn as building sites.
+const AGENCIES = ["State", "Treasury", "Defense", "Justice", "Interior", "Agriculture", "Commerce", "Labor", "HHS", "HUD", "Transportation", "Energy", "Education", "Veterans Affairs", "Homeland Security", "CIA", "EPA", "NASA", "OMB", "SBA"];
+
+/** The White House at the head of a lawn, with everything inside it; the agencies around it are still going up. */
+function layout(): Layout {
   const sites = new Map<string, Site>();
   const add = (site: Site) => sites.set(site.key, site);
   const mirror = (rect: Rect): Rect => ({ ...rect, x: MAP_W - rect.x - rect.w });
   add(makeSite("whitehouse", "whitehouse", "White House", "White House", "Center", { x: 72, y: 3, w: 32, h: 14 }, { x: 80, w: 16 }));
-  world.committees.forEach((department, index) => {
+  AGENCIES.forEach((name, index) => {
     const side = index % 2 === 0;
     const row = Math.floor(index / 2);
-    const rect: Rect = { x: 54 - 22 * (row % 2), y: 24 + 9 * row, w: 16, h: 6 };
-    add(makeSite(`dept:${department.code}`, "department", `Department of ${department.name}`.replace("Department of Justice", "Department of Justice"), department.name, side ? "House" : "Senate", side ? rect : mirror(rect)));
+    const rect: Rect = { x: 56 - 24 * (row % 2), y: 24 + 7 * row, w: 14, h: 5 };
+    add(makeSite(`agency:${index}`, "construction", `${name} (under construction)`, name, side ? "House" : "Senate", side ? rect : mirror(rect)));
   });
   add(makeSite("library", "library", "Library", "Library", "House", { x: 10, y: 5, w: 16, h: 8 }));
   add(makeSite("revoked", "memorial", "Revoked Orders", "Revoked Orders", "Senate", mirror({ x: 10, y: 5, w: 16, h: 8 })));
-  const gate = makeSite("gate", "gate", "To Capitol Hill", "To Capitol Hill", "Center", { x: 83, y: 92, w: 10, h: 5 });
+  const gate = makeSite("gate", "gate", "To Capitol Hill", "To Capitol Hill", "Center", { x: 83, y: 97, w: 10, h: 5 });
   gate.travel = "capitol";
   add(gate);
   return {
@@ -162,8 +195,9 @@ function layout(world: World): Layout {
     conveyors: {},
     pool: { x: 85, y: 34, w: 6, h: 10 },
     origin: "whitehouse",
+    enterable: ["whitehouse"],
     graveyard: { fates: ["r"], site: "revoked" },
-    siteOf: (loc) => (loc && sites.has(loc) ? loc : loc ? "whitehouse" : null),
+    siteOf: (loc) => (loc ? "whitehouse" : null),
     ...streets(sites),
   };
 }
@@ -176,7 +210,7 @@ export const whitehouse: WorldDef = {
   layout,
   line: () => provider.line(),
   periodLabel: (entry) => `${names[entry.congress] ?? "President"} · ${entry.years[0]}–${entry.years[1] ?? "now"}`,
-  tabs: { roster: false },
+  tabs: { roster: true, rosterLabel: "Cabinet" },
   board: {
     measures: [
       ["introduced", "How many were signed", 0],
@@ -224,13 +258,13 @@ export const whitehouse: WorldDef = {
     items: "orders",
     period: (world) => `presidency of ${world.members[0]?.name ?? "the President"}${world.years ? ` (${world.years[0]}–${world.final ? world.years[1] : "now"})` : ""}`,
     stamp: (world, through) => (world.final ? `Last order signed ${through}` : `Orders through ${through}`),
-    stages: { whitehouse: "At the White House", dept: "With a department" },
+    stages: { whitehouse: "At the White House" },
     overview: (world) => ({
       title: world.final ? `What ${world.members[0]?.name} ordered` : "What the President has ordered",
-      lead: `${world.members[0]?.name ?? "The President"} ${world.final ? "signed" : "has signed"} ${world.counts.total.toLocaleString()} executive order${world.counts.total === 1 ? "" : "s"}${world.years ? ` ${world.final ? `from ${world.years[0]} to ${world.years[1]}` : `since ${world.years[0]}`}` : ""}. Each sheet of paper is one of them, at the department it mostly gives directions to, or at the White House when it addresses several or none.`,
-      where: "Where those orders went",
+      lead: `${world.members[0]?.name ?? "The President"} ${world.final ? "signed" : "has signed"} ${world.counts.total.toLocaleString()} executive order${world.counts.total === 1 ? "" : "s"}${world.years ? ` ${world.final ? `from ${world.years[0]} to ${world.years[1]}` : `since ${world.years[0]}`}` : ""}. They are inside the White House: click it to go in. The agencies around it are still being built.`,
+      where: "Who they direct",
     }),
-    kicker: (site) => (site.style === "department" ? "Department" : site.style === "gate" ? "Another world" : "White House grounds"),
+    kicker: (site) => (site.style === "gate" ? "Another world" : "White House grounds"),
     person: "Signed by",
     deadOnly: "Revoked orders only",
     fates: { r: { name: "Revoked by a later order", how: "A later order says it revokes, rescinds or supersedes these, in whole or in part. This is read from the wording of the later order, so some revocations are missed." } },
