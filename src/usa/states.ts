@@ -44,7 +44,7 @@ export const STATES: StateInfo[] = [
   state("AK", "Alaska", "Juneau", 1959, 49),
   state("AZ", "Arizona", "Phoenix", 1912, 48),
   state("AR", "Arkansas", "Little Rock", 1836, 25),
-  state("CA", "California", "Sacramento", 1850, 31),
+  { ...state("CA", "California", "Sacramento", 1850, 31), world: "california" },
   state("CO", "Colorado", "Denver", 1876, 38),
   state("CT", "Connecticut", "Hartford", 1788, 5, 1),
   state("DE", "Delaware", "Dover", 1787, 1, 3),

@@ -39,7 +39,8 @@ export type SiteStyle =
   | "gate"
   | "construction"
   | "court"
-  | "atlas";
+  | "atlas"
+  | "mansion";
 
 export interface Site {
   key: string;
@@ -59,7 +60,27 @@ export interface Site {
   reach?: "House" | "Senate";
 }
 
+/** What a legislature's map has that Congress's does not, or calls by another name. */
+export interface Plan {
+  /** What the two houses are called, by the wing each fills. */
+  chambers: { House: string; Senate: string };
+  /** The buildings across the top, in place of the White House, the Supreme Court and the way to the map of the country. */
+  top: Site[];
+  /** Other names for the buildings the houses share, as [label, short]. */
+  shared?: Partial<Record<"adopted" | "law" | "library" | "memorial" | "conference", [string, string]>>;
+  /** What each house calls the list of bills waiting for its floor: "Calendar" in Congress. */
+  calendar?: string;
+  /** What a two-year period is called: "Congress" in Washington, "session" in Sacramento. */
+  period?: string;
+  /** The fates whose bills are laid at the memorial, where they are more than a veto and a lost vote. */
+  graveyard?: Layout["graveyard"];
+}
+
 export interface Layout {
+  /** What the two houses are called, where it is not "House" and "Senate". */
+  names?: { House: string; Senate: string };
+  /** What a two-year period is called, where it is not "Congress". */
+  period?: string;
   sites: Map<string, Site>;
   chambers: Partial<Record<"House" | "Senate", Rect>>;
   conveyors: Partial<Record<"House" | "Senate", { from: { x: number; y: number }; to: { x: number; y: number } }>>;
@@ -113,28 +134,40 @@ function shortName(name: string): string {
     .replace(/ and /g, " & ");
 }
 
-export function buildLayout(committees: Committee[]): Layout {
-  const sites = new Map<string, Site>();
-  const add = (entry: Site) => sites.set(entry.key, entry);
+/** The executive's place at the head of the avenues, where Congress's map has the White House. */
+export const EXECUTIVE_RECT: Rect = { x: 72, y: 3, w: 32, h: 14 };
 
-  // The other two branches, across the top. The court is a placeholder: a building with nothing in it yet.
-  add(makeSite("president", "whitehouse", "White House", "White House", "Center", { x: 72, y: 3, w: 32, h: 14 }, { x: 80, w: 16 }));
-  add(makeSite("court", "court", "Supreme Court", "Supreme Court", "Center", { x: 124, y: 6, w: 24, h: 11 }, { x: 130, w: 12 }));
-
-  // The way out to the map of the United States, on the lawn the other side of the White House from the court.
+/** The way out to the map of the United States: a board on the lawn to the west of the executive. */
+export function atlasGate(): Site {
   const atlas = makeSite("gate-usa", "atlas", "Map of the United States", "U.S. Map", "Center", { x: 28, y: 6, w: 24, h: 11 }, { x: 34, w: 12 });
   atlas.travel = "usa";
-  add(atlas);
+  return atlas;
+}
+
+export function buildLayout(committees: Committee[], plan?: Plan): Layout {
+  const sites = new Map<string, Site>();
+  const add = (entry: Site) => sites.set(entry.key, entry);
+  const names = plan?.chambers ?? { House: "House", Senate: "Senate" };
+  const shared = (key: keyof NonNullable<Plan["shared"]>, label: string, short: string) => plan?.shared?.[key] ?? [label, short];
+
+  if (plan) for (const entry of plan.top) add(entry);
+  else {
+    // The other two branches, across the top.
+    add(makeSite("president", "whitehouse", "White House", "White House", "Center", EXECUTIVE_RECT, { x: 80, w: 16 }));
+    add(makeSite("court", "court", "Supreme Court", "Supreme Court", "Center", { x: 124, y: 6, w: 24, h: 11 }, { x: 130, w: 12 }));
+    // The way out to the map of the United States, on the lawn the other side of the White House from the court.
+    add(atlasGate());
+  }
 
   // What the chambers share, out at the sides: beside each chamber, on the street the mall crosses,
   // and below those, beside the calendars.
   const beside: Rect = { x: 3, y: 36, w: 16, h: 8 };
   const below: Rect = { x: 3, y: 47, w: 16, h: 7 };
-  add(makeSite("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", beside));
-  add(makeSite("law", "archive", "Law Archive", "Law Archive", "Center", mirror(beside)));
-  add({ ...makeSite("library", "library", "Library of Congress", "Library", "Center", below), reach: "House" });
-  add({ ...makeSite("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", mirror(below)), reach: "Senate" });
-  add(makeSite("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 20, w: 10, h: 8 }));
+  add(makeSite("adopted", "hall", ...shared("adopted", "Resolutions Hall", "Resolutions"), "Center", beside));
+  add(makeSite("law", "archive", ...shared("law", "Law Archive", "Law Archive"), "Center", mirror(beside)));
+  add({ ...makeSite("library", "library", ...shared("library", "Library of Congress", "Library"), "Center", below), reach: "House" });
+  add({ ...makeSite("memorial", "memorial", ...shared("memorial", "Bill Memorial", "Bill Memorial"), "Center", mirror(below)), reach: "Senate" });
+  add(makeSite("conference", "conference", ...shared("conference", "Conference Room", "Conference"), "Center", { x: 83, y: 20, w: 10, h: 8 }));
 
   const houseChamber: Rect = { x: 22, y: 21, w: 50, h: 23 };
   const wings: { chamber: "House" | "Senate"; flip: (r: Rect) => Rect }[] = [
@@ -146,15 +179,17 @@ export function buildLayout(committees: Committee[]): Layout {
 
   for (const { chamber, flip } of wings) {
     const floorDock = flip({ x: 35, y: 0, w: 24, h: 0 });
-    add(makeSite(`floor:${chamber}`, "chamber", `${chamber} Floor`, `${chamber} Floor`, chamber, chambers[chamber], {
+    const name = names[chamber];
+    const calendar = plan?.calendar ?? "Calendar";
+    add(makeSite(`floor:${chamber}`, "chamber", `${name} Floor`, `${name} Floor`, chamber, chambers[chamber], {
       x: floorDock.x,
       w: floorDock.w,
     }));
-    add(makeSite(`other_chamber:${chamber}`, "inbox", `${chamber} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
-    add(makeSite(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 35, y: 48, w: 24, h: 6 })));
-    add(makeSite(`referral_desk:${chamber}`, "desk", `${chamber} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
+    add(makeSite(`other_chamber:${chamber}`, "inbox", `${name} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
+    add(makeSite(`calendar:${chamber}`, "calendar", `${name} ${calendar}`, calendar, chamber, flip({ x: 35, y: 48, w: 24, h: 6 })));
+    add(makeSite(`referral_desk:${chamber}`, "desk", `${name} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
     const hopper = flip({ x: 6, y: 93, w: 9, h: 5 });
-    add(makeSite(`hopper:${chamber}`, "hopper", `${chamber} Hopper`, "Hopper", chamber, hopper));
+    add(makeSite(`hopper:${chamber}`, "hopper", `${name} Hopper`, "Hopper", chamber, hopper));
     const desk = sites.get(`referral_desk:${chamber}`)!.rect;
     const beltY = hopper.y + 2.5;
     conveyors[chamber] =
@@ -165,10 +200,13 @@ export function buildLayout(committees: Committee[]): Layout {
     const own = committees
       .filter((c) => c.chamber === chamber)
       .sort((a, b) => a.name.localeCompare(b.name));
+    // A state house can have half as many committees again as a house of Congress: they are set closer.
+    const close = Boolean(plan) && own.length > 24;
+    const across = close ? 8 : 6;
     own.forEach((committee, index) => {
-      const col = index % 6;
-      const row = Math.floor(index / 6);
-      const rect = flip({ x: 5 + 12 * col, y: 59 + 8 * row, w: 10, h: 5 });
+      const col = index % across;
+      const row = Math.floor(index / across);
+      const rect = flip(close ? { x: 5 + 9 * col, y: 57 + 7 * row, w: 8, h: 5 } : { x: 5 + 12 * col, y: 59 + 8 * row, w: 10, h: 5 });
       add(makeSite(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), chamber, rect));
     });
   }
@@ -183,7 +221,7 @@ export function buildLayout(committees: Committee[]): Layout {
     }));
   });
 
-  return { sites, chambers, conveyors, pool: { x: 85, y: 48, w: 6, h: 14 }, ...streets(sites) };
+  return { ...(plan ? { names, period: plan.period, graveyard: plan.graveyard } : {}), sites, chambers, conveyors, pool: { x: 85, y: 48, w: 6, h: 14 }, ...streets(sites) };
 }
 
 /** Streets for a set of sites: a lane from each dock to its avenue (centre sites reach both), and the two avenues. */

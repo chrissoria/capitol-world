@@ -87,6 +87,7 @@ export function framed(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 function roofColors(entry: Site): [string, string] {
   switch (entry.style) {
     case "whitehouse":
+    case "mansion":
       return [PALETTE.white, PALETTE.stoneEdge];
     case "archive":
       return [PALETTE.gold, PALETTE.goldDark];
@@ -131,7 +132,7 @@ function drawRoofed(ctx: CanvasRenderingContext2D, entry: Site) {
     framed(ctx, wx, wallTop, 10, 9, PALETTE.window);
     box(ctx, wx + 4, wallTop + 1, 1, 7, PALETTE.ink);
   }
-  if (entry.style === "archive" || entry.style === "hall" || entry.style === "memorial" || entry.style === "library") {
+  if (entry.style === "archive" || entry.style === "hall" || entry.style === "memorial" || entry.style === "library" || entry.style === "mansion") {
     for (let cx = x + 6; cx < x + w - 6; cx += 14) {
       if (cx + 4 > doorX - 2 && cx < doorX + doorW + 2) continue;
       framed(ctx, cx, y + roofH - 2, 5, h - roofH + 2, PALETTE.white);

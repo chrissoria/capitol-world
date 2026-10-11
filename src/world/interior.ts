@@ -189,7 +189,7 @@ export class InteriorScene extends Phaser.Scene {
         this.plans.set("court", plan);
       }
     } else {
-      members = this.world.members.filter((member) => member.chamber === wing);
+      members = this.world.members.filter((member) => member.chamber === wing && !member.left);
       plan = this.plans.get(wing);
       if (!plan) {
         const leaders: Record<string, string> = this.world.roles?.leaders ?? {};

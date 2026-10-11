@@ -1,5 +1,5 @@
 import { createMusic } from "./audio/music";
-import { archived, congressInAddress, loadCommittees, loadWorld, setCongress, useProvider } from "./data/load";
+import { archived, congressInAddress, loadCommittees, loadWorld, setCongress, useProvider, useSource } from "./data/load";
 import { setMeetingCongress } from "./data/meetings";
 import { ordinal } from "./data/types";
 import { createCalendar } from "./ui/calendar";
@@ -29,6 +29,7 @@ const untouched = { app: $("app").cloneNode(true), about: $("about").cloneNode(t
 // The world on show: Capitol Hill, or another named in the address.
 let def = worldInAddress();
 useProvider(def.provider);
+useSource(def.source);
 // The map of the United States is not a world: it has no items of its own, and borrows the Capitol's members.
 let atlas = atlasInAddress();
 if (atlas) setCongress(null);
@@ -49,12 +50,13 @@ function switchTo(congress: number | null, address: "push" | "replace" | "keep" 
   if (next.key !== def.key) {
     def = next;
     useProvider(def.provider);
+    useSource(def.source);
   }
   if (atlas) congress = null;
   setCongress(congress);
   if (address !== "keep") {
     const query = new URLSearchParams(location.search);
-    for (const name of ["congress", "term", "world"]) query.delete(name);
+    for (const name of ["congress", "term", "session", "world"]) query.delete(name);
     if (atlas) query.set("world", "usa");
     else if (def.key !== "capitol") query.set("world", def.key);
     if (congress !== null) query.set(def.periodParam, String(congress));
@@ -105,7 +107,7 @@ async function main() {
     loading.textContent = def.key === "capitol" && archived
       ? `The ${ordinal(archived)} Congress could not be loaded. `
       : "The map data could not be loaded. Please try again later. ";
-    if (archived !== null || def.key !== "capitol") loading.append(Object.assign(document.createElement("a"), { href: location.pathname, textContent: "Open the current Congress" }));
+    if (archived !== null || def.key !== "capitol") loading.append(Object.assign(document.createElement("a"), { href: `${location.pathname}${archived !== null && def.key !== "capitol" ? `?world=${def.key}` : ""}`, textContent: archived !== null && def.legislature ? `Open the current ${def.legislature.period}` : "Open the current Congress" }));
     console.error(error);
     return;
   }
@@ -171,7 +173,7 @@ async function main() {
     onPlace(inside) {
       calendar.close();
       // The chambers have their own tune, and so do the committee rooms.
-      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || def.key !== "capitol" ? "inside" : "committee");
+      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       storyButton.hidden = Boolean(inside) || !scene.hasStory || !def.words.replayAll;

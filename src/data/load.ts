@@ -1,15 +1,44 @@
 import type { CommitteeFile } from "./meetings";
 import type { CongressList, MemberFacts, MemberFile, SearchIndex, World } from "./types";
 
-const ROOT = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
 const BUNDLED = `${import.meta.env.BASE_URL}fixtures/`;
-/** Who each member is and when they served: the app's file in the congress-members dataset (build_congress_members.py). */
-const MEMBERS_URL = "https://huggingface.co/datasets/chrissoria/congress-members/resolve/main/world/members.json";
+
+/**
+ * Where a legislature's map files are. Congress's are the default; a state's have the same shapes
+ * (build_california_snapshot.py), so the loaders below read either.
+ */
+export interface Source {
+  /** The folder holding the files of the period in progress, with `archive/<period>/` for finished ones. */
+  root: string;
+  /** The file in that folder listing the finished periods. */
+  list: string;
+  /** Whether the period in progress is kept gzipped, as finished ones always are. */
+  gzipped: boolean;
+  /** Whether a copy of the period in progress ships with the app, for development and as a fallback. */
+  bundled: boolean;
+  /** Who each member is and when they served; null where there is no such file. */
+  members: string | null;
+  /** Whether the period in progress has longer summaries in `text/`, as finished ones do. */
+  currentText: boolean;
+  /** The periods that can be opened, the one in progress first, where they are not numbered as Congresses are. */
+  line?(): Promise<CongressEntry[]>;
+}
+
+const CONGRESS: Source = {
+  root: "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/",
+  list: "congresses.json",
+  gzipped: false,
+  bundled: true,
+  // The app's file in the congress-members dataset (build_congress_members.py).
+  members: "https://huggingface.co/datasets/chrissoria/congress-members/resolve/main/world/members.json",
+  currentText: false,
+};
+let source = CONGRESS;
 
 /** The finished Congress the address asks for with `?congress=118`, or null for the current one. */
 export function congressInAddress(): number | null {
   const query = new URLSearchParams(location.search);
-  const raw = query.get("congress") ?? query.get("term");
+  const raw = query.get("congress") ?? query.get("term") ?? query.get("session");
   const asked = raw === null || raw === "" ? NaN : Number(raw);
   return Number.isInteger(asked) && asked >= 0 ? asked : null;
 }
@@ -40,13 +69,25 @@ export function useProvider(next: DataProvider | null) {
   committeeFile = undefined;
 }
 
+/** Read another legislature's files (nothing for Congress's). What was loaded from the last one is forgotten. */
+export function useSource(next?: Source) {
+  if ((next ?? CONGRESS) === source) return;
+  source = next ?? CONGRESS;
+  committeeFile = undefined;
+  memberFile = undefined;
+  congressLine = undefined;
+  searchIndexes.clear();
+  textFiles.clear();
+}
+
 // A finished Congress is built once and kept in its own folder; it has no bundled copy.
-const remote = () => (archived ? `${ROOT}archive/${archived}/` : ROOT);
+const remote = () => (archived ? `${source.root}archive/${archived}/` : source.root);
 
 export type DataSource = "live" | "bundled";
 
 /** `?data=live` or `?data=bundled` overrides the default (bundled in dev, live in production). */
 function preferred(): DataSource {
+  if (!source.bundled) return "live";
   const asked = new URLSearchParams(location.search).get("data");
   if (asked === "live" || asked === "bundled") return asked;
   return import.meta.env.DEV ? "bundled" : "live";
@@ -71,11 +112,11 @@ async function fromEither<T>(file: string): Promise<{ data: T; source: DataSourc
 
 /** A file of the current Congress: live or bundled, whichever is preferred, with the other as a fallback. */
 async function currentFile<T>(file: string): Promise<{ data: T; source: DataSource }> {
-  const order: DataSource[] = preferred() === "live" ? ["live", "bundled"] : ["bundled", "live"];
+  const order: DataSource[] = !source.bundled ? ["live"] : preferred() === "live" ? ["live", "bundled"] : ["bundled", "live"];
   let lastError: unknown;
-  for (const source of order) {
+  for (const from of order) {
     try {
-      return { data: await fetchJson<T>((source === "live" ? ROOT : BUNDLED) + file), source };
+      return { data: await fetchJson<T>((from === "live" ? source.root : BUNDLED) + file), source: from };
     } catch (error) {
       lastError = error;
     }
@@ -85,16 +126,16 @@ async function currentFile<T>(file: string): Promise<{ data: T; source: DataSour
 
 export async function loadWorld(): Promise<{ world: World; source: DataSource }> {
   if (provider) return { world: await provider.world(archived), source: "live" };
-  const { data, source } = await fromEither<World>(archived ? "world.json.gz" : "world.json");
+  const { data, source: from } = await fromEither<World>(archived || source.gzipped ? "world.json.gz" : "world.json");
   if (data.schema !== 1 || !Array.isArray(data.bills) || !Array.isArray(data.members)) {
     throw new Error("world.json is not in the expected format");
   }
-  return { world: data, source };
+  return { world: data, source: from };
 }
 
 /** The finished Congresses that can be opened, newest first. Empty if the list cannot be read. */
 export function loadCongresses(): Promise<CongressList["archive"]> {
-  return fetchJson<CongressList>(`${ROOT}congresses.json`).then((list) => list.archive ?? [], () => []);
+  return fetchJson<CongressList>(source.root + source.list).then((list) => list.archive ?? [], () => []);
 }
 
 const TEXT_FILES = 16; // build_world_snapshot.py: a finished Congress's long summaries, by bill number modulo this
@@ -107,8 +148,8 @@ const textFiles = new Map<string, Promise<Record<string, string>>>();
 export function loadText(id: string): Promise<string | null> {
   if (provider) return provider.text ? provider.text(id).catch(() => null) : Promise.resolve(null);
   const [congress, , number] = id.split("-");
-  if (!archived || Number(congress) !== archived || !/^\d+$/.test(number ?? "")) return Promise.resolve(null);
-  const url = `${ROOT}archive/${congress}/text/${Number(number) % TEXT_FILES}.json.gz`;
+  if (!/^\d+$/.test(number ?? "") || (archived ? Number(congress) !== archived : !source.currentText)) return Promise.resolve(null);
+  const url = `${remote()}text/${Number(number) % TEXT_FILES}.json.gz`;
   let file = textFiles.get(url);
   if (!file) textFiles.set(url, (file = fetchJson<Record<string, string>>(url)));
   return file.then((texts) => texts[id] ?? null, () => (textFiles.delete(url), null));
@@ -123,10 +164,11 @@ let memberFile: Promise<MemberFile | null> | undefined;
  * in development and as a fallback otherwise.
  */
 export function loadMemberFacts(id: string): Promise<MemberFacts | null> {
-  if (provider) return Promise.resolve(null);
+  const members = source.members;
+  if (provider || !members) return Promise.resolve(null);
   memberFile ??= (async () => {
     const bundled = `${BUNDLED}members.json`;
-    for (const url of preferred() === "live" ? [MEMBERS_URL, bundled] : [bundled, MEMBERS_URL]) {
+    for (const url of preferred() === "live" ? [members, bundled] : [bundled, members]) {
       try {
         const file = await fetchJson<MemberFile>(url);
         if (file.schema === 1 && file.members && typeof file.members === "object") return file;
@@ -144,7 +186,7 @@ let committeeFile: Promise<CommitteeFile> | undefined;
 /** Committee rosters and meetings, loaded the first time a committee is opened. */
 export function loadCommittees(): Promise<CommitteeFile> {
   if (provider) return Promise.reject(new Error("this world has no committees"));
-  committeeFile ??= fromEither<CommitteeFile>(archived ? "committees.json.gz" : "committees.json").then((result) => result.data);
+  committeeFile ??= fromEither<CommitteeFile>(archived || source.gzipped ? "committees.json.gz" : "committees.json").then((result) => result.data);
   return committeeFile;
 }
 
@@ -156,7 +198,7 @@ export function loadSearchOf(congress: number | null): Promise<SearchIndex> {
   let index = searchIndexes.get(congress);
   if (!index) {
     index = congress
-      ? fetchJson<SearchIndex>(`${ROOT}archive/${congress}/search.json.gz`)
+      ? fetchJson<SearchIndex>(`${source.root}archive/${congress}/search.json.gz`)
       : currentFile<SearchIndex>("search.json.gz").then((result) => result.data);
     index.catch(() => searchIndexes.delete(congress)); // so a failed load can be tried again
     searchIndexes.set(congress, index);
@@ -173,7 +215,10 @@ export interface CongressEntry {
   congress: number;
   /** First and last year; the last is null for the Congress still under way. */
   years: [number, number | null];
+  /** Whether this is the period in progress, whose files are the ones kept current. */
   live: boolean;
+  /** Set for a period in progress whose work is over: a session after the Governor's last day to sign. */
+  ended?: boolean;
 }
 
 let congressLine: Promise<CongressEntry[]> | undefined;
@@ -181,6 +226,7 @@ let congressLine: Promise<CongressEntry[]> | undefined;
 /** Every Congress that can be opened, the current one first. Empty if the list cannot be read. */
 export function loadCongressLine(): Promise<CongressEntry[]> {
   if (provider) return provider.line();
+  if (source.line) return (congressLine ??= source.line().catch(() => []));
   congressLine ??= loadCongresses().then((list) => {
     if (!list.length) return [];
     const current = Math.max(...list.map((item) => item.congress)) + 1;

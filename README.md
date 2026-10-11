@@ -46,7 +46,7 @@ they are scenery with a caption, listed in `src/world/era.ts`.
 
 ## Worlds
 
-Capitol Hill is one of three worlds. The White House world is about executive
+Capitol Hill is one of four worlds. The White House world is about executive
 orders. Click the White House to go inside: the President at the desk in the
 Oval Office with the orders on it, the cabinet at its table, the senior staff at
 their desks, the mess and the briefing room. The orders are listed by the
@@ -73,10 +73,45 @@ which joins the Supreme Court Database, Oyez and the Court's own docket and is
 licensed CC BY-NC. Subjects and outcomes are the database's coding and are
 missing for the term in progress.
 
+California Capitol World (`?world=california`, and `&session=2023` for the
+2023–2024 session) is the California Legislature: the same map as Capitol Hill
+with the Assembly in the west wing, the Senate in the east, the Governor's
+Office where the White House stands, and California's own words for every step.
+It has every session back to 1999–2000. A measure's place is read from its
+history, in which the Legislature records where each action left it, so nothing
+is guessed from wording; for sessions before 2007–2008 the record says only how
+a measure ended, and those that did not pass lie together at the memorial.
+Summaries are the Legislative Counsel's Digest. California gives bills no
+policy area, so the first committee a bill was sent to for its subject stands
+in for one. Committee rooms list their members, taken from the committee's most
+recent roll call; hearings are not shown yet. The data is in `world/` beside
+[chrissoria/california-bills](https://huggingface.co/datasets/chrissoria/california-bills),
+refreshed daily.
+
 A world is described by one definition in `src/worlds/` (see `types.ts`): where
 its data comes from, how its buildings are laid out, its words, and what its
 whiteboard can plot. The scene, panel, search, statistics, whiteboard and travel
 are shared, so a new world is a data adapter, a layout and a vocabulary.
+
+### Another state's capitol
+
+A state legislature is not a new kind of world. It is Congress's kind, so it
+uses the Capitol's map, loaders and panel, and gives only what differs:
+
+1. Its data, in the shapes Congress's files have: `world.json.gz`,
+   `search.json.gz`, `committees.json.gz`, `text/<n>.json.gz` and a list of
+   sessions (`build_california_snapshot.py` in cat-pol-datasets is the model).
+   The lower house is written as `"House"`, the wing it fills on the map.
+2. A definition like `src/worlds/california.ts`: where the files are (`source`),
+   what the houses, the executive and a session are called (`legislature`), the
+   buildings across the top and the names of the shared ones (a `Plan` for
+   `buildLayout`), what each building does (`explain`), and the words for the
+   Stats tab and the whiteboard.
+3. Its name in `WorldKey` and `WORLDS` (`src/worlds/`), and in the state's
+   `world` in `src/usa/states.ts`, which turns the star on its capital gold.
+
+`docs/state_worlds.md` has what is left to do for California and how the other
+states' data might be had.
 
 Live at <https://christophersoria.com/capitol-world/>.
 
@@ -89,9 +124,10 @@ Congress, which it reads from Capitol World's file.
 
 - Click a state to open that state's own map, with its counties; click a
   county for its card. A county's name shows beside the pointer.
-- A star marks each capital. A gold one leads straight into a world, and so far
-  only Washington's does, into Capitol World. A white one opens the capital's
-  card, which says its world is not built yet.
+- A star marks each capital. A gold one leads straight into a world: so far
+  Washington's, into Capitol World, and Sacramento's, into California Capitol
+  World. A white one opens the capital's card, which says its world is not
+  built yet.
 - The District and the five territories have no map of their own; a click
   opens their card.
 - The address can name a state (`#state=CA`), a county by its Census code
@@ -150,7 +186,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 
 ## Layout
 
-- `src/worlds/` one definition per world (Capitol Hill, the White House, the Supreme Court) and the shape they share
+- `src/worlds/` one definition per world (Capitol Hill, the White House, the Supreme Court, California's Capitol) and the shape they share
 - `src/usa/` the map of the United States and of each state: places, grids, drawing, scene and panel
 - `tools/make_usmap.mjs` builds those grids from the Census outlines
 - `src/data/` snapshot types and loading

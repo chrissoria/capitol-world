@@ -110,7 +110,8 @@ export class AtlasScene extends Phaser.Scene {
     this.textures.addCanvas("sea", drawSea());
     this.textures.addCanvas("star", drawStar(1, PALETTE.white));
     this.textures.addCanvas("star-big", drawStar(2, PALETTE.white));
-    this.textures.addCanvas("star-gold", drawStar(2, PALETTE.yellow));
+    this.textures.addCanvas("star-gold", drawStar(1, PALETTE.yellow));
+    this.textures.addCanvas("star-gold-big", drawStar(2, PALETTE.yellow));
     const far = 4096; // sea out past the edges, enough for the widest screen and the largest sheet
     this.add.tileSprite(-far, -far, far * 3, far * 3, "sea").setOrigin(0).setDepth(DEPTH.sea);
     this.glow = this.add.graphics().setDepth(DEPTH.glow);
@@ -192,7 +193,7 @@ export class AtlasScene extends Phaser.Scene {
     }
     if (view.heading) this.heading = this.text(view.heading.text, 11).setOrigin(0.5, 0).setPosition(view.heading.x * CELL, view.heading.y * CELL);
     for (const spec of view.stars) {
-      const image = this.add.image(spec.x * CELL, spec.y * CELL, spec.gold ? "star-gold" : spec.big ? "star-big" : "star").setDepth(DEPTH.star);
+      const image = this.add.image(spec.x * CELL, spec.y * CELL, `star${spec.gold ? "-gold" : ""}${spec.big ? "-big" : ""}`).setDepth(DEPTH.star);
       this.stars.push({ spec, image, reach: spec.big ? 14 : 9 });
     }
 

@@ -12,13 +12,14 @@
 //   4. give it its words;
 //   5. add it to the list in ./index.ts.
 
-import type { CongressEntry, DataProvider } from "../data/load";
+import type { CongressEntry, DataProvider, Source } from "../data/load";
 import type { Bill, Member, World } from "../data/types";
-import type { StatsWords } from "../ui/stats";
+import type { Note } from "../ui/explain";
+import type { StatsNames, StatsWords } from "../ui/stats";
 import type { BoardConfig } from "../ui/whiteboard";
 import type { Layout, Site } from "../world/layout";
 
-export type WorldKey = "capitol" | "whitehouse" | "court";
+export type WorldKey = "capitol" | "whitehouse" | "court" | "california";
 /** Somewhere a door can lead: a world, or the map of the United States (../usa), which is not one. */
 export type Destination = WorldKey | "usa";
 
@@ -58,9 +59,50 @@ export interface Words {
   replayAll?: string;
 }
 
+/**
+ * What a legislature calls itself and its parts. Congress and a state's legislature are the same kind
+ * of world: two houses, committees, a floor, an executive who signs. Only the names differ, and they
+ * are here. To add a state: write its data files in the shapes Congress's have (see
+ * build_california_snapshot.py), copy ./california.ts, and name the world in ../usa/states.ts.
+ *
+ * In the data and the code the two houses keep the names of the wings they fill, "House" (the west
+ * wing: the lower house) and "Senate". What a visitor reads comes from `chambers`.
+ */
+export interface Legislature {
+  chambers: { House: string; Senate: string };
+  /** "Congress", "the Legislature". */
+  body: string;
+  /** One two-year period and several: "Congress" and "Congresses", "session" and "sessions". */
+  period: string;
+  periods: string;
+  /** A period's name in a sentence: "118th Congress", "2023–2024 session". */
+  periodName(entry: { congress: number }): string;
+  /** A member's title: "Representative", "Assembly Member". */
+  title(member: Member): string;
+  /** Those who add their names to a bill: "cosponsor", "coauthor". */
+  cosponsor: string;
+  /** The official site, and a measure's page on it from the measure's id. */
+  site: string;
+  url?(id: string): string;
+  /** Whose words a bill's summary is, when it is not one of Congress's two kinds. */
+  summaryNote?: string;
+  /** False where meetings are not in the data: a committee's panel then lists its members only. */
+  meetings: boolean;
+  /** What to say of where a committee's list of members comes from, when that needs saying. */
+  rosterNote?: string;
+  /** What each building does, where it differs from Congress's. */
+  explain?(site: Site): Note | undefined;
+  /** The About box, where it differs from Capitol World's. */
+  about?(world: World, final: boolean): { heading?: string; text: string; note?: boolean }[];
+}
+
 export interface WorldDef {
   key: WorldKey;
   name: string;
+  /** Set for a legislature: Congress, or a state's. */
+  legislature?: Legislature;
+  /** Where a legislature's files are, when they are not Congress's. */
+  source?: Source;
   /** The address parameter that picks a period: ?congress=118, ?term=39. */
   periodParam: string;
   /** Where the data comes from. Null for the Capitol, whose loaders are the default. */
@@ -72,13 +114,15 @@ export interface WorldDef {
   periodLabel(entry: CongressEntry): string;
   words: Words;
   /** Which tabs the panel shows. */
-  tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string };
+  tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string; seatWord?: string };
   /** List the overview by where the items are (the Capitol's way) rather than by their area. */
   overviewBy?: "place";
   /** Whether the overview lists items by their area (a department, say) rather than by where they are. */
   /** What the whiteboard can plot, and how the Stats tab words its counts, when they differ from the Capitol's. */
   board?: BoardConfig;
   stats?: StatsWords;
+  /** The names the Stats tab uses for a legislature that is not Congress. */
+  statsNames?: StatsNames;
   /** A scene inside a building that an item's card can open: an argument re-staged in the Courtroom. */
   staging?(bill: Bill): { place: string; label: string } | null;
   /** Anything more to say about one item, as lines for the inspector. */

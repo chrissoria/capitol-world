@@ -9,14 +9,14 @@ import type { Site } from "../world/layout";
 import type { Filter, Target } from "../world/scene";
 import type { WorldDef } from "../worlds/types";
 import { add, el, niceDate, put } from "./dom";
-import { describeFinished, explainSite, explainStage } from "./explain";
+import { describeFinished, explainSite, explainStage, useNotes } from "./explain";
 import { contactBox } from "./contact";
 import { memberFacts } from "./member";
 import { createRoster } from "./roster";
 import { createStats } from "./stats";
 import { createWhiteboard } from "./whiteboard";
 
-export const STAGES: Record<string, string> = {
+const SHARED_STAGES: Record<string, string> = {
   hopper: "Just introduced",
   referral_desk: "Referred (committee not identified)",
   committee: "In committee",
@@ -29,8 +29,9 @@ export const STAGES: Record<string, string> = {
   vetoed: "Vetoed",
   adopted: "Resolution adopted",
 };
+export const STAGES: Record<string, string> = { ...SHARED_STAGES };
 /** Why a bill is dead. The keys are written by build_world_snapshot.py. */
-export const FATES: Record<string, { name: string; how: string }> = {
+const SHARED_FATES: Record<string, { name: string; how: string }> = {
   v: { name: "Vetoed", how: "The President returned these without signing them, and Congress did not override the veto." },
   f: { name: "Lost a floor vote", how: "The latest action on each of these is a vote it lost: a passage vote that failed, a motion that was rejected, or a vote to end debate that fell short. A chamber can vote again, so a few come back." },
   s: { name: "No action in a year", how: "Nothing has happened to these for a year or more, so they are presumed dead. In the six Congresses before this one, 96 in 100 such bills never moved again. One that does move leaves this list." },
@@ -39,6 +40,7 @@ export const FATES: Record<string, { name: string; how: string }> = {
   o: { name: "Died in the other chamber", how: "One chamber passed these and the other did not before the Congress ended." },
   b: { name: "Passed both chambers, never became law", how: "Both chambers passed some version of these, but they did not agree on one text, or it was not signed, before the Congress ended." },
 };
+export const FATES: Record<string, { name: string; how: string }> = { ...SHARED_FATES };
 const SLUGS: Record<string, string> = {
   hr: "house-bill",
   s: "senate-bill",
@@ -78,13 +80,21 @@ function congressUrl(id: string): string {
 
 export function createPanel(world: World, actions: PanelActions, def: WorldDef) {
   const words = def.words;
-  Object.assign(STAGES, words.stages);
-  Object.assign(FATES, words.fates ?? {});
+  for (const key of Object.keys(STAGES)) delete STAGES[key];
+  for (const key of Object.keys(FATES)) delete FATES[key];
+  Object.assign(STAGES, SHARED_STAGES, words.stages);
+  Object.assign(FATES, SHARED_FATES, words.fates ?? {});
   // A finished Congress shows every bill where it ended, so nothing is "active" or "recent".
   const final = Boolean(world.final);
   const congressName = words.period(world);
-  // Capitol Hill has committees to enter, a current window of 30 days and bills with sponsors; other worlds may not.
-  const capitol = def.key === "capitol";
+  // A legislature has committees to enter, a current window of 30 days and bills with sponsors; other worlds may not.
+  const leg = def.legislature;
+  const capitol = Boolean(leg);
+  const period = leg?.period ?? "Congress";
+  const periods = leg?.periods ?? "Congresses";
+  const officialSite = leg?.site ?? "Congress.gov";
+  const urlOf = (id: string) => leg?.url?.(id) ?? congressUrl(id);
+  useNotes(leg?.explain, period);
   const Items = words.items[0].toUpperCase() + words.items.slice(1);
   const plural = (n: number) => (n === 1 ? words.item : words.items);
   const active = final ? "" : "active ";
@@ -281,7 +291,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h2", {}, words.overview(world).title),
       el("p", {}, words.overview(world).lead),
       el("p", { class: "note" }, capitol
-        ? "Click a paper or a building. The House, the Senate and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom."
+        ? `Click a paper or a building. The ${leg!.chambers.House}, the ${leg!.chambers.Senate} and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom.`
         : "Click a paper or a building. Drag to move around; scroll or pinch to zoom."),
       ...def.doors.filter((door) => door.site.startsWith("gate")).map((door) => {
         const go = el("button", { type: "button", class: "door" }, door.label);
@@ -290,12 +300,12 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       }),
       ERA[world.congress]
         ? el("details", { class: "explain" }, el("summary", {}, "Signs of the times"),
-            el("p", { class: "note" }, "A few small objects on the lawns place this Congress in its years. Point at one on the map to read it."),
+            el("p", { class: "note" }, `A few small objects on the lawns place this ${period} in its years. Point at one on the map to read it.`),
             el("ul", {}, ...ERA[world.congress].map((marker) => el("li", {}, marker.note))))
         : null,
       el("h3", {}, words.overview(world).where),
       el("ul", { class: "list" }, ...rows),
-      el("p", { class: "note" }, final || !capitol ? `Pick one to list its ${words.items}.` : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this Congress are in Search.`),
+      el("p", { class: "note" }, final || !capitol ? `Pick one to list its ${words.items}.` : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this ${period} are in Search.`),
       // A world listed by place can be listed by subject as well, where its items have one.
       ...(!capitol && byPlace && world.bills.some((bill) => bill.policy_area) ? [el("h3", {}, "What they are about"), el("ul", { class: "list" }, ...areaRows)] : []),
     );
@@ -364,7 +374,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     const excerpt = world.summary_source === "excerpt";
     const asked = world.summary_source === "court";
     const summary = bill.summary ? el("p", { class: "long-text tall", tabindex: "0" }, bill.summary) : null;
-    const summaryNote = el("p", { class: "note" }, asked ? (bill.type === "APP" ? "The first entry on the application’s docket." : "The question as Oyez puts it.") : excerpt ? "The opening of the order’s text." : world.summary_source === "crs" ? "Official summary by the Congressional Research Service, shortened." : "Written by an AI model from the bill text. It may describe an earlier version of the bill.");
+    const summaryNote = el("p", { class: "note" }, asked ? (bill.type === "APP" ? "The first entry on the application’s docket." : "The question as Oyez puts it.") : excerpt ? "The opening of the order’s text." : world.summary_source === "crs" ? "Official summary by the Congressional Research Service, shortened." : leg?.summaryNote ? `${leg.summaryNote}, shortened.` : "Written by an AI model from the bill text. It may describe an earlier version of the bill.");
     if (summary && bill.summary.endsWith("…")) {
       void loadText(bill.id).then((text) => {
         if (!text || !summary.isConnected) return;
@@ -372,6 +382,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
         const cut = text.endsWith("…");
         if (excerpt) summaryNote.textContent = cut ? "The order’s text from its first section; it runs on past what is shown here." : "The order’s text, after the opening formula.";
         else if (world.summary_source === "crs") summaryNote.textContent = cut ? "Official summary by the Congressional Research Service; it runs on past what is shown here." : "Official summary by the Congressional Research Service.";
+        else if (leg?.summaryNote) summaryNote.textContent = cut ? `${leg.summaryNote}; it runs on past what is shown here.` : `${leg.summaryNote}.`;
       });
     }
     put(sections.inspect, 
@@ -384,8 +395,8 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h3", {}, words.actionHeading ?? (capitol ? "Latest action" : "Signed")),
       el("p", { class: "long-text", tabindex: "0" }, el("strong", {}, niceDate(bill.last_action.date)), " — ", bill.last_action.text),
       el("h3", {}, words.personHeading?.(bill) ?? words.person),
-      sponsorButton ? el("ul", { class: "list" }, el("li", {}, sponsorButton)) : el("p", {}, words.noPerson?.(bill) ?? "Unknown"),
-      capitol ? el("p", { class: "note" }, `${bill.cosponsors} cosponsor${bill.cosponsors === 1 ? "" : "s"} · introduced ${niceDate(bill.introduced)}`) : null,
+      sponsorButton ? el("ul", { class: "list" }, el("li", {}, sponsorButton)) : el("p", {}, words.noPerson?.(bill) ?? bill.author ?? "Unknown"),
+      capitol ? el("p", { class: "note" }, `${bill.cosponsors} ${leg!.cosponsor}${bill.cosponsors === 1 ? "" : "s"} · introduced ${niceDate(bill.introduced)}`) : null,
       // A case opens with what it asks; the rest of what is known about it follows.
       ...(asked && summary ? [el("h3", {}, bill.type === "APP" ? "What was asked" : "The question"), summary, summaryNote] : []),
       // What else the world knows about this item: for an order, what it revokes and what revoked it.
@@ -402,7 +413,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       summary && !asked ? el("h3", {}, excerpt ? "What it says" : "Summary") : null,
       asked ? null : summary,
       summary && !asked ? summaryNote : null,
-      el("p", {}, el("a", { href: bill.url || congressUrl(bill.id), target: "_blank", rel: "noopener" }, words.readMore?.(bill) ?? (capitol ? "Read it on Congress.gov ↗" : "Read the whole order ↗"))),
+      el("p", {}, el("a", { href: bill.url || urlOf(bill.id), target: "_blank", rel: "noopener" }, words.readMore?.(bill) ?? (capitol ? `Read it on ${officialSite} ↗` : "Read the whole order ↗"))),
     );
   }
 
@@ -421,7 +432,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     }
     put(sections.inspect, 
       backButton(),
-      el("div", { class: "kicker" }, member.role || (member.chamber === "Senate" ? "Senator" : "Representative")),
+      el("div", { class: "kicker" }, member.role || (leg ? leg.title(member) : member.chamber === "Senate" ? "Senator" : "Representative")),
       el("h2", {}, pin(member.party), member.name),
       capitol
         ? el("p", {}, el("span", { class: "chip" }, partyName(member.party)), el("span", { class: "chip" }, member.chamber === "House" && member.district ? `${member.state}-${member.district}` : member.state))
@@ -434,8 +445,8 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
           ? (member.n_total ? `${member.n_total.toLocaleString()} ${plural(member.n_total)} of this presidency mostly direct this person’s department.` : "")
           : `${member.n_total.toLocaleString()} executive ${plural(member.n_total)} signed.`
         : final
-          ? `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} in the ${congressName}.`
-          : `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this Congress, ${theirs.length} with an action in the last 30 days.`),
+          ? `${words.person} of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} in the ${congressName}.`
+          : `${words.person} of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this ${period}, ${theirs.length} with an action in the last 30 days.`),
       write,
       theirs.length ? el("h3", {}, !capitol ? Items : final ? "Their bills" : "Active bills") : null,
       el("ul", { class: "list" }, ...theirs.slice(0, 200).map((bill) => billRow(bill))),
@@ -473,8 +484,8 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       meeting.outcomes?.length ? el("ul", { class: "outcomes" }, ...meeting.outcomes.map((line) => el("li", {}, line))) : null,
       billRows.length ? el("p", {}, el("strong", {}, past ? "Bills taken up" : "Bills on the agenda")) : null,
       billRows.length ? el("ul", { class: "list" }, ...billRows) : null,
-      meeting.n_bills > listed.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - listed.length} more, listed on Congress.gov.`) : null,
-      el("p", {}, stage, " ", el("a", { href: meetingUrl(meeting, info.chamber), target: "_blank", rel: "noopener" }, "Videos and documents on Congress.gov ↗")),
+      meeting.n_bills > listed.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - listed.length} more, listed on ${officialSite}.`) : null,
+      el("p", {}, stage, " ", el("a", { href: meetingUrl(meeting, info.chamber), target: "_blank", rel: "noopener" }, `Videos and documents on ${officialSite} ↗`)),
     );
   }
 
@@ -493,6 +504,11 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     });
     const shown = past.slice(0, 8);
     const older = past.slice(8);
+    // Where meetings are not in the data, the committee's panel is its members.
+    if (leg && !leg.meetings) {
+      return el("div", {},
+        roster.length ? el("details", { class: "explain" }, el("summary", {}, `Members (${info.members.length})`), el("ul", { class: "list" }, ...roster), leg.rosterNote ? el("p", { class: "note" }, leg.rosterNote) : null) : null);
+    }
     return el(
       "div",
       {},
@@ -502,7 +518,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h3", {}, "Calendar: past meetings"),
       past.length ? el("div", {}, ...shown.map((meeting) => meetingRow(code, meeting, info, true))) : el("p", { class: "note" }, "None on record."),
       older.length ? el("details", { class: "explain" }, el("summary", {}, `${older.length} earlier meetings`), ...older.map((meeting) => meetingRow(code, meeting, info, true))) : null,
-      el("p", { class: "note" }, `${info.n_meetings.toLocaleString()} meetings this Congress, counting its subcommittees; the latest ${past.length} are here. Re-staging seats every current member and the listed witnesses. Who actually attended is not recorded.`),
+      el("p", { class: "note" }, `${info.n_meetings.toLocaleString()} meetings this ${period}, counting its subcommittees; the latest ${past.length} are here. Re-staging seats every current member and the listed witnesses. Who actually attended is not recorded.`),
       roster.length ? el("details", { class: "explain" }, el("summary", {}, `Members (${info.members.length})`), el("ul", { class: "list" }, ...roster)) : null,
     );
   }
@@ -529,15 +545,17 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
         ? el("p", {}, final
             ? `${total.toLocaleString()} of the ${everything.toLocaleString()} ${capitol ? "bills and resolutions" : words.items} of the ${congressName} ${capitol ? "died" : "were later revoked"}.`
             : capitol
-              ? `${total.toLocaleString()} of this Congress’s ${everything.toLocaleString()} bills and resolutions are dead or presumed dead.`
+              ? `${total.toLocaleString()} of this ${period}’s ${everything.toLocaleString()} bills and resolutions are dead or presumed dead.`
               : `${total.toLocaleString()} of the ${everything.toLocaleString()} ${words.items} of the ${congressName} have been revoked by a later order.`)
         : el("p", { class: "note" }, "The count of dead bills needs a newer copy of the data. It will appear after the next daily update."),
       causes.length ? el("h3", {}, capitol ? "How they died" : "Why they are here") : null,
       el("ul", { class: "list" }, ...causes),
       dead ? el("p", { class: "note" }, !capitol
         ? `Pick it to list the ${words.items}. They are kept here rather than at their departments.`
+        : dead.x
+        ? "Pick a cause to list its bills."
         : final
-        ? "Pick a cause to list its bills. Only bills that were vetoed or voted down lie at the memorial itself; the rest are on the map where they stood when the Congress ended."
+        ? `Pick a cause to list its bills. Only bills that were vetoed or voted down lie at the memorial itself; the rest are on the map where they stood when the ${period} ended.`
         : "Pick a cause to list its bills. A bill is presumed dead after a year with no action, and leaves the list if it moves again.") : null,
       here.length ? el("h3", {}, capitol ? "Laid at the memorial" : "Kept here") : null,
       el("ul", { class: "list" }, ...here.slice(0, 200).map((bill) => billRow(bill, `${FATES[bill.fate ?? ""]?.name ?? ""} · ${niceDate(bill.last_action.date)}`))),
@@ -550,7 +568,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     visit(view);
     showTab("inspect");
     const head = [backButton(), el("div", { class: "kicker" }, "Bill Memorial"), el("h2", {}, FATES[code]?.name ?? "Dead bills"), el("p", {}, FATES[code]?.how ?? "")];
-    put(sections.inspect, ...head, el("p", { class: "note" }, "Loading every bill of this Congress…"));
+    put(sections.inspect, ...head, el("p", { class: "note" }, `Loading every bill of this ${period}…`));
     void loadSearch().then((index) => {
       if (JSON.stringify(trail[trail.length - 1].view) !== JSON.stringify(view)) return; // the visitor has moved on
       const fate = index.fate ?? "";
@@ -627,8 +645,8 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h2", {}, index.title[at]),
       el("p", {}, el("span", { class: "chip stage" }, index.statuses[index.status[at]] ?? ""), index.policy_areas[index.policy_area[at]] ? el("span", { class: "chip" }, index.policy_areas[index.policy_area[at]]) : null),
       el("p", {}, `Last action ${niceDate(index.date[at])}. ${final ? "It is not on the map." : "It has not moved in the last 30 days, so it is not on the map."}`),
-      sponsor ? el("p", {}, "Sponsor: ", pin(sponsor.party), memberLine(sponsor)) : null,
-      el("p", {}, el("a", { href: congressUrl(id), target: "_blank", rel: "noopener" }, "Read it on Congress.gov ↗")),
+      sponsor ? el("p", {}, `${words.person}: `, pin(sponsor.party), memberLine(sponsor)) : null,
+      el("p", {}, el("a", { href: urlOf(id), target: "_blank", rel: "noopener" }, `Read it on ${officialSite} ↗`)),
     );
   }
 
@@ -641,7 +659,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     sections.search,
     el("label", { for: "search-box" }, capitol ? "Search all bills and members" : `Search every ${words.item}`),
     searchBox,
-    el("label", { class: "check", for: "search-everywhere" }, everywhere, capitol ? " Bills of every other Congress too" : ` ${Items} of every other president too`),
+    el("label", { class: "check", for: "search-everywhere" }, everywhere, capitol ? ` Bills of every other ${period} too` : ` ${Items} of every other president too`),
     searchResults,
   );
   let searchRun = 0;
@@ -701,7 +719,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     if (!everywhere.checked) return;
     const others = (await loadCongressLine()).filter((entry) => entry.congress !== world.congress);
     if (run !== searchRun || !others.length) return;
-    const waiting = el("p", { class: "note" }, "Searching the other Congresses…");
+    const waiting = el("p", { class: "note" }, `Searching the other ${periods}…`);
     searchResults.append(waiting);
     const elsewhere: HTMLElement[] = [];
     for (const entry of others) {
@@ -722,7 +740,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
           "button",
           { type: "button" },
           el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })} · ${other.title[i]}`),
-          el("span", { class: "row-sub" }, `${capitol ? `${ordinal(entry.congress)} Congress` : (other.sponsor_names?.[other.sponsor[i]] ?? "")} · ${other.statuses[other.status[i]] ?? ""} · ${niceDate(other.date[i])}`),
+          el("span", { class: "row-sub" }, `${leg ? leg.periodName(entry) : (other.sponsor_names?.[other.sponsor[i]] ?? "")} · ${other.statuses[other.status[i]] ?? ""} · ${niceDate(other.date[i])}`),
         );
         // A link to a bill of another Congress opens that Congress with the bill selected.
         button.addEventListener("click", () => (location.hash = `#bill=${id}`));
@@ -732,9 +750,9 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     waiting.remove();
     add(
       searchResults,
-      el("h3", {}, capitol ? "In other Congresses" : "Under other presidents"),
+      el("h3", {}, capitol ? `In other ${periods}` : "Under other presidents"),
       elsewhere.length ? el("ul", { class: "list" }, ...elsewhere) : el("p", { class: "note" }, `No ${def.words.item} matches.`),
-      elsewhere.length ? el("p", { class: "note" }, capitol ? "Up to 12 from each Congress. Picking one opens that Congress." : "Up to 12 from each president. Picking one opens that presidency.") : null,
+      elsewhere.length ? el("p", { class: "note" }, capitol ? `Up to 12 from each ${period}. Picking one opens that ${period}.` : "Up to 12 from each president. Picking one opens that presidency.") : null,
     );
   }
   everywhere.addEventListener("change", () => void runSearch());
@@ -780,9 +798,9 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   );
   summary.textContent = "Nothing is filtered.";
 
-  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats);
+  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats, def.statsNames);
 
-  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: def.tabs.rosterItems ?? words.items });
+  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: def.tabs.rosterItems ?? words.items }, leg?.chambers, def.tabs.seatWord);
 
   // ── About ──────────────────────────────────────────────────────────────────
   // Out of the way: a small link under the title opens it.
@@ -794,7 +812,14 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   about.addEventListener("click", (event) => {
     if (event.target === about) about.close(); // a click on the backdrop
   });
-  add(document.getElementById("about-body")!, 
+  const ownAbout = leg?.about?.(world, final);
+  if (ownAbout) {
+    add(document.getElementById("about-body")!,
+      el("h2", { id: "about-title" }, "About this map"),
+      ...ownAbout.flatMap((part) => [part.heading ? el("h3", {}, part.heading) : null, el("p", part.note ? { class: "note" } : {}, part.text)]),
+      el("p", {}, "Party is shown by the pin on each figure and in this panel: ", pin("D"), "Democrat, ", pin("R"), "Republican, ", pin("I"), "Independent."),
+    );
+  } else add(document.getElementById("about-body")!, 
     el("h2", { id: "about-title" }, "About this map"),
     el("p", {}, "Capitol World shows where the bills of the ", ordinal(world.congress), final ? " U.S. Congress ended up in the legislative process." : " U.S. Congress are in the legislative process. Bills start in a hopper at the bottom and move up: to a committee, onto a calendar, to the floor, across to the other chamber, and on to the White House."),
     el("h3", {}, "The data"),

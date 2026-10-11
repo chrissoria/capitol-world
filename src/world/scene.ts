@@ -267,9 +267,9 @@ export class WorldScene extends Phaser.Scene {
     for (const chamber of ["House", "Senate"] as const) {
       const rect = this.layout.chambers[chamber];
       if (!rect) continue;
-      const total = this.world.members.filter((m) => m.chamber === chamber).length;
+      const total = this.world.members.filter((m) => m.chamber === chamber && !m.left).length;
       this.hints.push(
-        this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${chamber.toUpperCase()} · ${total} members`, 12).setOrigin(0.5, 1),
+        this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${this.chamberName(chamber).toUpperCase()} · ${total} members`, 12).setOrigin(0.5, 1),
       );
     }
   }
@@ -537,10 +537,10 @@ export class WorldScene extends Phaser.Scene {
       // A building of another world can stage one of its items: an argument in the Courtroom.
       const staged = hall && meetingId ? (this.layout.staged?.(meetingId) ?? null) : null;
       this.scene.launch("interior", { place, sitting: Boolean(staged) });
-      this.hooks.onPlace({ place, label: `the ${hall ? (site?.label ?? place) : place}`, note: staged ?? "the comings and goings are animation" });
+      this.hooks.onPlace({ place, label: `the ${hall ? (site?.label ?? place) : this.chamberName(place)}`, note: staged ?? "the comings and goings are animation" });
       return;
     }
-    const label = `the ${site?.label ?? "committee room"}`;
+    const label = site ? `the ${site.label}${this.layout.names ? " committee room" : ""}` : "the committee room";
     this.hooks.onPlace({ place, label, note: "opening the room…" });
     let unbuilt = false; // a finished Congress whose committee records are not published yet
     void loadCommittees()
@@ -559,7 +559,7 @@ export class WorldScene extends Phaser.Scene {
           },
         });
         const note = !meeting
-          ? unbuilt ? "this Congress’s committee records are not published yet" : this.world.final ? "this Congress has ended" : "not meeting right now"
+          ? unbuilt ? `this ${this.layout.period ?? "Congress"}’s committee records are not published yet` : this.world.final ? `this ${this.layout.period ?? "Congress"} has ended` : "not meeting right now"
           : meetingId
             ? `re-staging the ${meeting.type.toLowerCase()} of ${meetingTime(meeting).split(",").slice(0, 2).join(",")}`
             : "in session now";
@@ -571,10 +571,10 @@ export class WorldScene extends Phaser.Scene {
   whereIs(memberId: string): string {
     if (this.memberSprites.has(memberId)) return "Out on the map, carrying a bill";
     const hall = this.layout.enterable?.[0];
-    const chamber = this.members.get(memberId)?.chamber || (hall ? (this.layout.sites.get(hall)?.label ?? "building") : "Capitol");
+    const chamber = this.chamberName(this.members.get(memberId)?.chamber ?? "") || (hall ? (this.layout.sites.get(hall)?.label ?? "building") : "Capitol");
     const inside = this.inside ? this.interior.whereIs(memberId) : null;
     if (!inside) return this.members.get(memberId)?.group === "In memory" ? `On a plaque in the ${chamber}` : `In the ${chamber}`;
-    const building = this.inside === "House" || this.inside === "Senate" ? this.inside : (this.layout.sites.get(this.inside!)?.short ?? this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
+    const building = this.inside === "House" || this.inside === "Senate" ? this.chamberName(this.inside) : (this.layout.sites.get(this.inside!)?.short ?? this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
     return `${building} · ${inside}`;
   }
 
@@ -795,6 +795,11 @@ export class WorldScene extends Phaser.Scene {
     let length = 0;
     for (let i = 1; i < points.length; i++) length += Math.abs(points[i].x - points[i - 1].x) + Math.abs(points[i].y - points[i - 1].y);
     return length;
+  }
+
+  /** What a house is called here: "House" is the Assembly in Sacramento. */
+  private chamberName(chamber: string): string {
+    return this.layout.names?.[chamber as Wing] ?? chamber;
   }
 
   private homeChamber(memberId: string): Wing | null {

@@ -31,6 +31,8 @@ export interface Member {
   n_world: number;
   n_total: number;
   role?: string;
+  /** Set for someone who held a seat in the period and no longer does: listed, but not counted or seated. */
+  left?: boolean;
   /** In a world without chambers, the circle the person belongs to: "President", "Cabinet", "White House". */
   group?: string;
   /** Colours for the figure, where it should suggest a particular person rather than be drawn at random. */
@@ -83,6 +85,8 @@ export interface Bill {
   number: string;
   title: string;
   sponsor: string;
+  /** Who is behind a bill that no member is: a committee, by name. */
+  author?: string;
   cosponsors: number;
   policy_area: string;
   status: string;

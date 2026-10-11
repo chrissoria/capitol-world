@@ -4,16 +4,16 @@
 import type { Member, World } from "../data/types";
 import { add, el, put } from "./dom";
 
-export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void, other?: { title: string; items: string }) {
+export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void, other?: { title: string; items: string }, chambers = { House: "House", Senate: "Senate" }, seatWord = "state") {
   const select = (id: string, options: [string, string][]) => {
     const node = el("select", { id });
     for (const [value, label] of options) node.append(el("option", { value }, label));
     return node;
   };
-  const search = el("input", { type: "search", id: "r-search", placeholder: other ? "Name or post" : "Name or state", autocomplete: "off" });
-  const chamber = select("r-chamber", [["", "Both chambers"], ["House", "House"], ["Senate", "Senate"]]);
+  const search = el("input", { type: "search", id: "r-search", placeholder: other ? "Name or post" : `Name or ${seatWord}`, autocomplete: "off" });
+  const chamber = select("r-chamber", [["", "Both chambers"], ["House", chambers.House], ["Senate", chambers.Senate]]);
   const party = select("r-party", [["", "Any party"], ["D", "Democrats"], ["R", "Republicans"], ["I", "Independents"]]);
-  const sort = select("r-sort", [["name", "Sort by last name"], ["state", "Sort by state"], ["bills", "Sort by active bills"]]);
+  const sort = select("r-sort", [["name", "Sort by last name"], ["state", `Sort by ${seatWord}`], ["bills", "Sort by active bills"]]);
   const summary = el("p", { class: "note" });
   const list = el("ul", { class: "list" });
   add(
@@ -47,7 +47,7 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
         sort.value === "bills"
           ? b.n_world - a.n_world || lastName(a).localeCompare(lastName(b))
           : sort.value === "state"
-            ? a.state.localeCompare(b.state) || lastName(a).localeCompare(lastName(b))
+            ? a.state.localeCompare(b.state, undefined, { numeric: true }) || lastName(a).localeCompare(lastName(b))
             : lastName(a).localeCompare(lastName(b)) || a.name.localeCompare(b.name),
       );
     places.clear();

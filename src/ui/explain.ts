@@ -4,7 +4,7 @@
 import type { Site } from "../world/layout";
 import { el } from "./dom";
 
-interface Note {
+export interface Note {
   /** What happens at this step. */
   role: string[];
   /** What the building holds on this map. */
@@ -170,7 +170,17 @@ const SHARED: Record<string, Note> = {
   },
 };
 
+let own: ((site: Site) => Note | undefined) | undefined;
+let period = "Congress";
+
+/** Explain the buildings of a legislature that is not Congress (nothing to go back to Congress's notes). */
+export function useNotes(notes?: (site: Site) => Note | undefined, periodWord = "Congress") {
+  own = notes;
+  period = periodWord;
+}
+
 function noteFor(site: Site): Note | undefined {
+  if (own) return own(site);
   const wing: Wing = site.wing === "Senate" ? "Senate" : "House";
   switch (site.style) {
     case "hopper":
@@ -197,14 +207,14 @@ export function describeFinished(finished: boolean) {
   ended = finished;
 }
 
-const ENDED = " This Congress has ended, so the map shows where each bill stood on its last day. A bill that had not become law by then died with the Congress.";
+const endedNote = () => ` This ${period} has ended, so the map shows where each bill stood on its last day. A bill that had not become law by then died with the ${period}.`;
 
 function fold(summary: string, notes: Note[]): HTMLElement | null {
   if (!notes.length) return null;
   const body: HTMLElement[] = [];
   for (const note of notes) {
     for (const paragraph of note.role) body.push(el("p", {}, paragraph));
-    const here = ended ? note.here.replace("in the last 30 days", "in this Congress") + ENDED : note.here;
+    const here = ended ? note.here.replace("in the last 30 days", `in this ${period}`) + endedNote() : note.here;
     body.push(el("p", { class: "note" }, el("strong", {}, "On this map: "), here));
   }
   return el("details", { class: "explain" }, el("summary", {}, summary), ...body);

@@ -40,14 +40,14 @@ export interface BoardSpec {
   who: "" | "R" | "D" | "I";
 }
 
-const MEASURES: [BoardSpec["measure"], string, number][] = [
+export const MEASURES: [BoardSpec["measure"], string, number][] = [
   ["introduced", "How many were introduced", 0],
   ["reported", "Share that got out of committee", 1],
   ["voted", "Share that got a floor vote", 2],
   ["passed", "Share that passed a chamber", 3],
   ["law", "Share that became law", 5],
 ];
-const ACROSS: [BoardSpec["across"], string][] = [
+export const ACROSS: [BoardSpec["across"], string][] = [
   ["party", "by sponsor’s party"],
   ["time", "over time"],
   ["congress", "by Congress"],

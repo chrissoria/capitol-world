@@ -44,7 +44,7 @@ function nationView(): SheetView {
       // The territories' names stand close together, and from far away they would run into one another.
       hideBelow: place.kind === "territory" ? 0.24 : 0,
     })),
-    stars: STATES.map((place) => ({ id: place.code, x: CAPITALS[place.code][0], y: CAPITALS[place.code][1], gold: Boolean(place.world), big: Boolean(place.world) })),
+    stars: STATES.map((place) => ({ id: place.code, x: CAPITALS[place.code][0], y: CAPITALS[place.code][1], gold: Boolean(place.world), big: place.kind === "district" })),
     column: { x: 340, y: 82 },
     heading: { text: "Territories", x: TERRITORY_BOX.x + TERRITORY_BOX.w / 2, y: TERRITORY_BOX.y + 1 },
     tiny: 20,
