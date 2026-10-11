@@ -87,6 +87,14 @@ public-domain [congress-legislators](https://github.com/unitedstates/congress-le
 project. A copy of both files is bundled in `public/fixtures/` for development
 and as a fallback.
 
+A member's card also shows the official website, the time in office and the
+birth date. Those come from `world/members.json` in the congress-members
+dataset (`build_congress_members.py` in cat-pol-datasets, from the same
+congress-legislators project), fetched when the first card is opened. The
+address is `MEMBERS_URL` in `src/data/load.ts`. A copy is bundled as
+`public/fixtures/members.json`; to try a newly built file, copy it there and
+run `npm run dev`. Without either copy the card shows what the map file has.
+
 ## Develop
 
 ```bash
@@ -112,6 +120,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 - `src/ui/panel.ts` the side panel: inspector (with a Back trail), search, filters, and the About dialog
 - `src/ui/calendar.ts` the wall calendar from a committee room: every meeting of the Congress, month by month
 - `src/ui/roster.ts` the Roster tab: every member, where their figure is, and a click to go there
+- `src/ui/member.ts` the lines of a member's card that come from `world/members.json`: website, time in office, birth date
 - `src/ui/explain.ts` the folded "What happens here?" notes on each building's part in the process
 - `src/ui/stats.ts` the Stats tab: introductions by period, party and member, and how far they got
 - `src/ui/whiteboard.ts` the whiteboard in the Library of Congress: charts drawn with marker strokes

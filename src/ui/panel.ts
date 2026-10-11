@@ -1,6 +1,6 @@
 // The side panel: everything on the map is also reachable here with a keyboard.
 
-import { loadCongressLine, loadSearch, loadSearchOf, loadText } from "../data/load";
+import { loadCongressLine, loadMemberFacts, loadSearch, loadSearchOf, loadText } from "../data/load";
 import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel, ordinal } from "../data/types";
@@ -10,6 +10,7 @@ import type { Filter, Target } from "../world/scene";
 import type { WorldDef } from "../worlds/types";
 import { add, el, niceDate, put } from "./dom";
 import { describeFinished, explainSite, explainStage } from "./explain";
+import { memberFacts } from "./member";
 import { createRoster } from "./roster";
 import { createStats } from "./stats";
 import { createWhiteboard } from "./whiteboard";
@@ -394,6 +395,13 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
 
   function showMember(member: Member) {
     const theirs = world.bills.filter((bill) => bill.sponsor === member.id).sort((a, b) => b.last_action.date.localeCompare(a.last_action.date));
+    // The website, time in office and birth date are in a file of their own, which arrives a moment after the card opens.
+    const more = capitol ? el("div", {}) : null;
+    if (more) {
+      void loadMemberFacts(member.id).then((facts) => {
+        if (facts && more.isConnected) put(more, memberFacts(member, facts, world.congress));
+      });
+    }
     put(sections.inspect, 
       backButton(),
       el("div", { class: "kicker" }, member.role || (member.chamber === "Senate" ? "Senator" : "Representative")),
@@ -401,6 +409,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       capitol
         ? el("p", {}, el("span", { class: "chip" }, partyName(member.party)), el("span", { class: "chip" }, member.chamber === "House" && member.district ? `${member.state}-${member.district}` : member.state))
         : member.party ? el("p", {}, el("span", { class: "chip" }, partyName(member.party))) : null,
+      more,
       el("p", {}, !capitol
         ? member.group && member.group !== "President"
           ? (member.n_total ? `${member.n_total.toLocaleString()} ${plural(member.n_total)} of this presidency mostly direct this person’s department.` : "")

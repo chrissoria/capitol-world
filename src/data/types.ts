@@ -37,6 +37,39 @@ export interface Member {
   look?: { skin?: string; hair?: string; suit?: string; tie?: string; style?: number };
 }
 
+/** One term a member served, from world/members.json. */
+export interface MemberTerm {
+  chamber: "House" | "Senate";
+  start: string;
+  end: string;
+  state: string;
+  district: number | null;
+  party: string;
+}
+
+/** What world/members.json knows about one member beyond the map file: how to reach them and when they served. */
+export interface MemberFacts {
+  /** The official website and contact details; empty for someone who has left Congress. */
+  url: string;
+  contact_form: string;
+  email: string;
+  phone: string;
+  office: string;
+  /** The start of the member's latest unbroken time in one chamber. */
+  since: string;
+  first_entered: string;
+  terms: MemberTerm[];
+  born: string;
+  gender: string;
+}
+
+/** world/members.json, written by build_congress_members.py (cat-pol-datasets) beside the congress-members dataset. */
+export interface MemberFile {
+  schema: number;
+  generated_at: string;
+  members: Record<string, MemberFacts>;
+}
+
 export interface Committee {
   code: string;
   name: string;

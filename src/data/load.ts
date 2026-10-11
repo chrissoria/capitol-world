@@ -1,8 +1,10 @@
 import type { CommitteeFile } from "./meetings";
-import type { CongressList, SearchIndex, World } from "./types";
+import type { CongressList, MemberFacts, MemberFile, SearchIndex, World } from "./types";
 
 const ROOT = "https://huggingface.co/datasets/chrissoria/federal-bills-active/resolve/main/world/";
 const BUNDLED = `${import.meta.env.BASE_URL}fixtures/`;
+/** Who each member is and when they served: the app's file in the congress-members dataset (build_congress_members.py). */
+const MEMBERS_URL = "https://huggingface.co/datasets/chrissoria/congress-members/resolve/main/world/members.json";
 
 /** The finished Congress the address asks for with `?congress=118`, or null for the current one. */
 export function congressInAddress(): number | null {
@@ -110,6 +112,31 @@ export function loadText(id: string): Promise<string | null> {
   let file = textFiles.get(url);
   if (!file) textFiles.set(url, (file = fetchJson<Record<string, string>>(url)));
   return file.then((texts) => texts[id] ?? null, () => (textFiles.delete(url), null));
+}
+
+let memberFile: Promise<MemberFile | null> | undefined;
+
+/**
+ * What is known about a member beyond the map file (website, time in office, birth date), fetched when
+ * the first member's card is opened. Null when the file cannot be read or does not have the member, and
+ * the card then shows what it always has. Like the map's own files, the copy in fixtures/ is read first
+ * in development and as a fallback otherwise.
+ */
+export function loadMemberFacts(id: string): Promise<MemberFacts | null> {
+  if (provider) return Promise.resolve(null);
+  memberFile ??= (async () => {
+    const bundled = `${BUNDLED}members.json`;
+    for (const url of preferred() === "live" ? [MEMBERS_URL, bundled] : [bundled, MEMBERS_URL]) {
+      try {
+        const file = await fetchJson<MemberFile>(url);
+        if (file.schema === 1 && file.members && typeof file.members === "object") return file;
+      } catch {
+        // try the other copy
+      }
+    }
+    return null;
+  })();
+  return memberFile.then((file) => file?.members[id] ?? null);
 }
 
 let committeeFile: Promise<CommitteeFile> | undefined;
