@@ -1376,6 +1376,443 @@ export function buildWhiteHouse(members: Member[]): Building {
   };
 }
 
+/**
+ * The Supreme Court, loosely: the Courtroom at the head of the Great Hall, the Conference Room and the
+ * justices' Chambers either side of the bench, and the Library, the Clerk's Office and a cafeteria off
+ * the hall. The plan is invented, like the others; the bench has the real one's wings, and who sits
+ * where on it goes by seniority.
+ */
+export function buildSupremeCourt(members: Member[]): Building {
+  const W = 59; // odd, so the Chief Justice's chair stands on the centre line
+  const H = 34;
+  const c = 29;
+  const MARBLE = "#f7f2e8";
+  const VEIN = "#e6dfcf";
+  const MAHOGANY = "#6b2f22";
+  const MAHOGANY_DARK = "#4a1f17";
+  const MAHOGANY_LIGHT = "#8a4532";
+  const DRAPE = "#8d2f2f";
+  const DRAPE_DARK = "#6f2222";
+  const BLACK = "#2b2530";
+  const kit = makeKit(W, H, "#b65a54", "#c56f62", hash("court"));
+  const { ground, over, g, o, cells, rooms, spots, staff, seats, block, spot, person, room, door, pick } = kit;
+  const { table, chairDown, chairUp, sofa, shelf, plant, lectern, flag, cooler, vending, rug, picture, papers, monitor, bust } = kit;
+
+  // The Chief Justice first, then the others as they come, which is by seniority.
+  const chief = members.find((member) => member.group === "Chief Justice") ?? members[0];
+  const justices = chief ? [chief, ...members.filter((member) => member !== chief)] : [];
+  const behind = 2; // the row the justices walk along behind their chairs
+  const wellDesks = behind + 6; // the row of the Clerk's and the Marshal's desks
+
+  // The Great Hall is everything that is not another room: the band across the building and the hall below it.
+  room("hall", "Great Hall", 0, 20, W, 14, "marble");
+  const hallRoom = rooms[rooms.length - 1];
+  hallRoom.y += 1; // its name goes on the floor inside the Courtroom's doors, not across them
+  hallRoom.h -= 1;
+  const conference = room("conference", "Conference Room", 0, 0, 15, 11, "blue");
+  const library = room("library", "Library", 0, 10, 15, 11, "wood");
+  const court = room("courtroom", "Courtroom", 14, 0, 31, 21, "carpet");
+  const chambers = room("chambers", "Chambers", 44, 0, 15, 21, "green");
+  const cafe = room("cafeteria", "Cafeteria", 0, 24, 15, 10, "tile");
+  const clerks = room("clerk", "Clerk’s Office", 44, 24, 15, 10, "wood");
+
+  // The wall behind the bench is two squares deep, to be tall enough for its columns and drapes.
+  for (let tx = court.ix; tx < court.ix + court.iw; tx++) kit.set(tx, 1, WALL);
+  // Chambers is divided into alcoves by short walls from either side.
+  for (const row of [3, 6, 9, 12, 15]) {
+    for (let i = 0; i < 4; i++) {
+      kit.set(chambers.ix + i, row, WALL);
+      kit.set(chambers.ix + chambers.iw - 1 - i, row, WALL);
+    }
+  }
+  door(14, behind); // from the Conference Room to behind the bench
+  door(44, behind); // and from Chambers
+  door(11, 10); // Conference Room to Library: off centre, clear of the Library's name
+  door(7, 20);
+  door(51, 20);
+  door(c - 1, 20, 3); // the Courtroom's doors, on the line of the centre aisle
+  door(10, 24);
+  door(48, 24);
+  door(c - 1, H - 1, 3);
+  kit.paint();
+
+  /** A marble column, standing free. */
+  const column = (tx: number, ty: number) => {
+    const x = tx * T;
+    const y = ty * T;
+    framed(o, x + 1, y + 10, 14, 5, PALETTE.stone);
+    framed(o, x + 3, y - 24, 10, 35, MARBLE);
+    box(o, x + 6, y - 23, 1, 33, VEIN);
+    box(o, x + 10, y - 23, 2, 33, PALETTE.stone);
+    framed(o, x + 1, y - 28, 14, 5, PALETTE.stone);
+    block(tx, ty);
+  };
+  /** A brass rail on turned posts, from one square to another along a row. */
+  const rail = (from: number, to: number, row: number) => {
+    if (to < from) return;
+    const x = from * T;
+    const y = row * T;
+    const w = (to - from + 1) * T;
+    for (let px = x + 3; px < x + w - 2; px += 5) box(o, px, y + 4, 2, 10, WOOD_DARK);
+    box(o, x, y + 13, w, 2, PALETTE.ink);
+    framed(o, x, y + 1, w, 4, PALETTE.gold);
+    box(o, x + 1, y + 2, w - 2, 1, PALETTE.yellow);
+    block(from, row, to - from + 1);
+  };
+
+  // ── The Courtroom: the bench under the drapes, the well in front of it, then the bar and the benches behind it. ──
+  {
+    const { ix, iw } = court;
+    const left = ix * T;
+    const wide = iw * T;
+    // The Chief Justice in the middle, then by seniority: the senior associate at the Chief's right hand
+    // (our left, since the bench faces down the room), the next at the left hand, and so on outward.
+    const sitting = justices.slice(0, 13);
+    const chairs = Math.max(9, sitting.length + 1 - (sitting.length % 2)); // an odd number, so both wings are alike
+    const half = chairs; // the bench runs this many squares either side of the Chief
+    const offset = (i: number) => (i % 2 ? -1 : 1) * 2 * Math.ceil(i / 2);
+
+    // The wall: a carved frieze, four columns, the red drapes between them and the clock over the Chief's chair.
+    box(g, left, 4, wide, 28, MARBLE);
+    box(g, left, 4, wide, 1, PALETTE.ink);
+    box(g, left, 5, wide, 5, VEIN);
+    for (let px = left + 3; px < left + wide - 3; px += 6) box(g, px, 6, 3, 3, PALETTE.stoneEdge);
+    box(g, left, 10, wide, 1, PALETTE.stoneEdge);
+    box(g, left, 29, wide, 3, PALETTE.wallShade);
+    for (let tx = ix + 1; tx < ix + iw; tx += 3) {
+      if (Math.abs(tx - c) <= 9) continue;
+      box(g, tx * T + 5, 11, 6, 18, VEIN); // pilasters along the plain marble
+      box(g, tx * T + 4, 11, 8, 2, PALETTE.stone);
+    }
+    const drapeX = (c - 9) * T;
+    const drapeW = 19 * T;
+    box(g, drapeX, 11, drapeW, 21, DRAPE);
+    for (let px = drapeX + 2; px < drapeX + drapeW; px += 5) box(g, px, 13, 1, 18, DRAPE_DARK);
+    for (let px = drapeX + 4; px < drapeX + drapeW; px += 10) box(g, px, 13, 1, 18, "#a53e3a");
+    box(g, drapeX, 11, drapeW, 2, PALETTE.goldDark);
+    box(g, drapeX, 30, drapeW, 2, DRAPE_DARK);
+    for (let px = drapeX + 1; px < drapeX + drapeW; px += 3) box(g, px, 31, 1, 1, PALETTE.gold);
+    for (const tx of [c - 9, c - 3, c + 3, c + 9]) {
+      const x = tx * T;
+      framed(g, x + 3, 9, 10, 21, MARBLE);
+      box(g, x + 6, 10, 1, 19, VEIN);
+      box(g, x + 10, 10, 2, 19, PALETTE.stone);
+      framed(g, x + 1, 5, 14, 5, PALETTE.stone);
+      framed(g, x + 1, 28, 14, 4, PALETTE.stone);
+    }
+    framed(g, c * T + 3, 16, 10, 10, PALETTE.gold); // between the room's name above and the Chief's badge below
+    box(g, c * T + 5, 18, 6, 6, PALETTE.white);
+    box(g, c * T + 8, 19, 1, 3, PALETTE.ink);
+    box(g, c * T + 8, 21, 2, 1, PALETTE.ink);
+
+    // The dais the bench stands on, and the bench: a straight middle and two wings set forward.
+    const DAIS = "#ece5d5";
+    framed(g, left, behind * T, wide, 3 * T, DAIS);
+    for (const x of [left, (c + 3) * T]) {
+      framed(g, x, (behind + 3) * T - 1, (c - 2) * T - left, T, DAIS); // under each wing, a step further forward
+      box(g, x + 1, (behind + 3) * T - 1, (c - 2) * T - left - 2, 1, DAIS);
+    }
+    for (let tx = ix; tx < ix + iw; tx += 2) box(g, tx * T + 5, behind * T + 20 + (tx % 4) * 3, 4, 1, VEIN);
+    const benchPiece = (x0: number, x1: number, row: number) => {
+      const y = row * T - 10;
+      framed(o, x0, y, x1 - x0, 26, MAHOGANY_DARK);
+      box(o, x0 + 1, y + 1, x1 - x0 - 2, 7, MAHOGANY);
+      box(o, x0 + 1, y + 1, x1 - x0 - 2, 1, MAHOGANY_LIGHT);
+      box(o, x0 + 1, y + 8, x1 - x0 - 2, 1, PALETTE.ink);
+      for (let px = x0 + 4; px + 9 <= x1 - 3; px += 16) {
+        box(o, px, y + 12, 9, 10, MAHOGANY);
+        box(o, px + 1, y + 13, 7, 8, MAHOGANY_DARK);
+      }
+    };
+    benchPiece((c - 3) * T, (c + 4) * T, behind + 2);
+    benchPiece((c - half) * T, (c - 2) * T, behind + 3);
+    benchPiece((c + 3) * T, (c + half + 1) * T, behind + 3);
+    block(c - 3, behind + 2, 7);
+    block(c - half, behind + 3, half - 2);
+    block(c + 3, behind + 3, half - 2);
+    // Nobody but a justice goes behind the bench: rails close it off at both ends.
+    rail(ix, c - half - 1, behind + 3);
+    rail(c + half + 1, ix + iw - 1, behind + 3);
+    for (let i = 0; i < chairs; i++) {
+      const tx = c + offset(i);
+      const row = Math.abs(offset(i)) >= 4 ? behind + 2 : behind + 1;
+      const x = tx * T;
+      framed(g, x + 2, row * T - 13, 12, 24, BLACK); // a tall leather chair
+      box(g, x + 3, row * T - 12, 10, 2, "#3d3f4a");
+      kit.set(tx, row, CHAIR);
+      const top = (row + 1) * T - 10;
+      papers(x + 2, top + 2);
+      box(o, x + 12, top - 3, 1, 5, PALETTE.ink); // microphone
+      box(o, x + 11, top - 4, 3, 2, PALETTE.ink);
+      const justice = sitting[i];
+      if (justice) seats.set(justice.id, spot("seat", tx, row, "down", "courtroom", { owner: justice.id }));
+    }
+    const flagAt = Math.min(half + 1, 13);
+    flag(c - flagAt, behind);
+    flag(c + flagAt, behind);
+
+    // The well: the Clerk at our left with the cases waiting, the Marshal at our right, counsel at the lectern.
+    const desks = wellDesks;
+    table(c - 11, desks, 5, WALNUT, "#4f2f18");
+    person("clerk-0", c - 9, desks - 1, "down");
+    table(c + 7, desks, 5, WALNUT, "#4f2f18");
+    person("clerk-1", c + 9, desks - 1, "down");
+    framed(o, (c + 10) * T + 2, desks * T - 5, 9, 4, WOOD_DARK); // the Marshal's gavel
+    box(o, (c + 10) * T + 5, desks * T - 8, 3, 3, WOOD);
+    papers((c + 7) * T + 6, desks * T - 4);
+    const counsel = desks + 1;
+    lectern(c, counsel);
+    person("guest-0", c, counsel + 1, "up");
+    let guest = 1;
+    for (const tx of [c - 5, c + 2]) {
+      table(tx, counsel, 4, WALNUT, "#4f2f18");
+      for (let i = 0; i < 4; i += 2) papers(tx * T + 8 + i * T, counsel * T - 4);
+      for (const seat of [tx + 1, tx + 2]) {
+        chairUp(seat, counsel + 1, LEATHER_DARK, LEATHER);
+        if (seat !== c - 4) staff.push({ frame: `guest-${guest++ % 8}`, tx: seat, ty: counsel + 1, dx: 0, face: "up" });
+      }
+    }
+
+    // The bar, with a gate on the aisle, and columns down both sides of the room.
+    const bar = counsel + 3;
+    rail(ix + 2, c - 2, bar);
+    rail(c + 2, ix + iw - 3, bar);
+    for (const row of [desks, bar, bar + 4]) {
+      column(ix + 1, row);
+      column(ix + iw - 2, row);
+    }
+    // Behind the bar: the press on our left, the public on our right.
+    box(g, (c - 1) * T + 3, (bar + 1) * T, 3 * T - 6, 7 * T, DRAPE);
+    box(g, (c - 1) * T + 5, (bar + 1) * T, 1, 7 * T, PALETTE.goldDark);
+    box(g, (c + 2) * T - 6, (bar + 1) * T, 1, 7 * T, PALETTE.goldDark);
+    let reporter = 0;
+    for (const row of [bar + 2, bar + 4, bar + 6]) {
+      for (let tx = c - 11; tx <= c + 11; tx++) {
+        if (Math.abs(tx - c) < 2) continue; // the centre aisle
+        const press = tx < c;
+        if (press) chairUp(tx, row, LEATHER_DARK, LEATHER);
+        else {
+          chairUp(tx, row, WOOD_DARK, WOOD);
+          box(o, tx * T, row * T + 4, T, 2, WOOD_DARK); // one long pew
+        }
+        if ((tx * 7 + row * 13) % 5 >= 2) continue;
+        staff.push({ frame: press ? `reporter-${reporter++ % 6}` : `guest-${guest++ % 8}`, tx, ty: row, dx: 0, face: "up" });
+      }
+    }
+  }
+
+  // ── The Conference Room: one table and nine chairs, and nobody in it but justices. ──
+  {
+    const { ix, iy, iw, ih } = conference;
+    const cx = ix + Math.floor(iw / 2);
+    const row = iy + 4;
+    // A fireplace on the north wall.
+    framed(g, (cx - 1) * T, 4, 3 * T, 13, PALETTE.stone);
+    box(g, (cx - 1) * T + 6, 7, 3 * T - 12, 9, BLACK);
+    box(g, cx * T + 2, 11, 12, 5, PALETTE.orange);
+    box(g, cx * T + 5, 9, 6, 7, PALETTE.yellow);
+    box(g, (cx - 1) * T + 2, 16, 3 * T - 4, 3, PALETTE.stoneEdge);
+    picture(cx - 4, iy - 1, 2);
+    picture(cx + 3, iy - 1, 2);
+    shelf(ix, iy, 2);
+    shelf(ix + iw - 3, iy, 2);
+    rug(ix + 1, row - 2, iw - 2, 5, DRAPE, PALETTE.gold);
+    table(cx - 4, row, 9, WALNUT, "#4f2f18");
+    for (let tx = cx - 4; tx <= cx + 4; tx++) {
+      const far = (tx - cx) % 2 === 0;
+      if (far) chairDown(tx, row - 1, LEATHER_DARK);
+      else chairUp(tx, row + 1, LEATHER_DARK, LEATHER);
+      spot("hearing", tx, far ? row - 1 : row + 1, far ? "down" : "up", "conference");
+      papers(tx * T + 4, row * T + (far ? -5 : 1));
+    }
+    spot("chat", cx - 2, iy + 1, "down", "conference");
+    spot("chat", cx + 2, iy + 1, "down", "conference");
+    sofa(cx - 1, iy + ih - 1, 3);
+    for (let i = 0; i < 3; i++) spot("sofa", cx - 1 + i, iy + ih - 1, "down", "conference");
+    plant(ix, iy + ih - 1);
+    plant(ix + iw - 1, iy + ih - 1);
+  }
+
+  // ── The Library: shelves to read at, and a table. ──
+  {
+    const { ix, iy, iw, ih } = library;
+    shelf(ix, iy, 9);
+    plant(ix + iw - 1, iy);
+    for (const tx of [ix + 1, ix + 3, ix + 5, ix + 7]) spot("read", tx, iy + 1, "up", "library");
+    for (const sx of [ix, ix + 6]) {
+      shelf(sx, iy + 3, 4);
+      spot("read", sx + 1, iy + 4, "up", "library");
+      spot("read", sx + 2, iy + 4, "up", "library");
+    }
+    const row = iy + ih - 2;
+    table(ix + 1, row, 5); // clear of the wall, so the chairs on its near side can be reached
+    for (const tx of [ix + 2, ix + 4]) {
+      chairDown(tx, row - 1);
+      spot("read", tx, row - 1, "down", "library");
+      chairUp(tx, row + 1);
+      spot("read", tx, row + 1, "up", "library");
+      papers(tx * T + 4, row * T - 4);
+    }
+    table(ix + 9, row, 3, WALNUT, "#4f2f18");
+    monitor((ix + 9) * T + 5, row * T - 9);
+    person("librarian-0", ix + 10, row - 1, "down");
+    plant(ix + iw - 1, iy + ih - 1);
+  }
+
+  // ── Chambers: the Chief Justice's desk at the head of the room, and an alcove each for the others down both sides. ──
+  {
+    const { ix, iy, iw, ih } = chambers;
+    const cx = ix + Math.floor(iw / 2);
+    flag(cx - 3, iy);
+    plant(ix, iy);
+    rug(cx - 1, iy + 2, 3, ih - 2, DRAPE, PALETTE.gold);
+    /** A desk with its chair behind it and law books on the wall; `tx` is the desk's left end. */
+    const desk = (tx: number, row: number, justice: Member | undefined) => {
+      const y = (row - 1) * T;
+      framed(g, tx * T + 3, y + 4, 3 * T - 6, 12, WALNUT);
+      box(g, tx * T + 4, y + 9, 3 * T - 8, 1, "#3b2a1c");
+      for (let px = tx * T + 5; px < (tx + 3) * T - 6; px += 2 + (px % 3)) {
+        box(g, px, y + 5, 2, 4, pick(BOOKS));
+        box(g, px, y + 10, 2, 5, pick(BOOKS));
+      }
+      chairDown(tx + 1, row, LEATHER_DARK);
+      table(tx, row + 1, 3, WALNUT, "#4f2f18");
+      papers(tx * T + 4, (row + 1) * T - 4);
+      box(o, tx * T + 38, (row + 1) * T - 9, 5, 2, "#3f8f4a"); // a reading lamp
+      box(o, tx * T + 40, (row + 1) * T - 7, 1, 4, PALETTE.gold);
+      spot("desk", tx + 1, row, "down", "chambers", justice ? { owner: justice.id } : {});
+    };
+    desk(cx - 1, iy, justices[0]);
+    // Eleven alcoves. The first on our left is left out: the door from behind the bench opens there.
+    for (let i = 1; i < 12; i++) {
+      const right = i % 2 === 1;
+      const row = iy + 3 * Math.floor(i / 2);
+      desk(right ? ix + iw - 3 : ix, row, justices[i]);
+    }
+    person("page-1", cx + 1, iy + 7, "down");
+    spot("chat", cx, iy + 7, "down", "chambers");
+    person("page-2", cx - 1, iy + 13, "down");
+    spot("chat", cx, iy + 13, "down", "chambers");
+    sofa(ix, iy + ih - 1, 3);
+    for (let i = 0; i < 3; i++) spot("sofa", ix + i, iy + ih - 1, "down", "chambers");
+    plant(ix + iw - 1, iy + ih - 1);
+    cooler(ix + iw - 2, iy + ih - 1);
+  }
+
+  // ── The Clerk's Office: where filings come in. ──
+  {
+    const { ix, iy, iw, ih } = clerks;
+    shelf(ix, iy, 2);
+    shelf(ix + 5, iy, 8);
+    for (const [index, tx] of [ix + 1, ix + 8].entries()) {
+      table(tx, iy + 3, 4, WALNUT, "#4f2f18");
+      monitor(tx * T + 6, (iy + 3) * T - 9);
+      papers(tx * T + 26, (iy + 3) * T - 4);
+      papers(tx * T + 40, (iy + 3) * T - 2);
+      person(index ? "page-0" : "clerk-2", tx + 1, iy + 2, "down");
+      spot("chat", tx + 2, iy + 4, "up", "clerk");
+    }
+    table(ix + 4, iy + 6, 5);
+    for (let i = 0; i < 5; i++) papers((ix + 4) * T + 4 + i * 15, (iy + 6) * T - 5 + (i % 2) * 3);
+    plant(ix, iy + ih - 1);
+    cooler(ix + iw - 1, iy + ih - 1);
+  }
+
+  // ── The cafeteria: a counter and three tables. ──
+  {
+    const { ix, iy, iw, ih } = cafe;
+    const x = ix * T;
+    const y = (iy + 1) * T;
+    framed(o, x, y - 6, 7 * T, 20, "#eef1f2");
+    box(o, x + 1, y + 7, 7 * T - 2, 6, PALETTE.steel);
+    box(o, x, y - 8, 7 * T, 2, PALETTE.window);
+    for (let i = 0; i < 6; i++) framed(o, x + i * T + 3, y - 4, 11, 8, pick(FOOD));
+    framed(o, x + 6 * T + 2, y - 5, 11, 9, "#3d3f4a");
+    box(o, x + 6 * T + 4, y - 3, 7, 3, PALETTE.yellow);
+    block(ix, iy + 1, 7);
+    block(ix, iy, 7);
+    person("server-0", ix + 1, iy, "down");
+    person("server-1", ix + 4, iy, "down");
+    for (const tx of [ix + 1, ix + 3, ix + 5]) spot("queue", tx, iy + 2, "up", "cafeteria");
+    cooler(ix + iw - 1, iy);
+    vending(ix + iw - 2, iy, PALETTE.partyD);
+    const row = iy + 5;
+    for (const tx of [ix + 1, ix + 5, ix + 9]) {
+      table(tx, row, 2, "#e9e2cf", "#b9b1a0");
+      for (const seat of [tx, tx + 1]) {
+        chairDown(seat, row - 1, PALETTE.orangeDark);
+        spot("eat", seat, row - 1, "down", "cafeteria", { table: row });
+        chairUp(seat, row + 1, PALETTE.orangeDark, PALETTE.orange);
+        spot("eat", seat, row + 1, "up", "cafeteria", { table: row });
+      }
+    }
+    plant(ix, iy + ih - 1);
+    plant(ix + iw - 1, iy + ih - 1);
+  }
+
+  // ── The Great Hall: columns and busts down both sides, benches along the walls, the seal in the floor. ──
+  {
+    const top = 21; // the first row of the hall, under the Courtroom's wall
+    const cx = c * T + 8;
+    const cy = 28 * T + 8;
+    const disc = (rx: number, ry: number, color: string) => {
+      for (let py = Math.floor(cy - ry); py <= cy + ry; py++) {
+        const span = rx * Math.sqrt(Math.max(0, 1 - ((py + 0.5 - cy) / ry) ** 2));
+        if (span >= 0.5) box(g, Math.round(cx - span), py, Math.round(span * 2), 1, color);
+      }
+    };
+    disc(44, 33, PALETTE.ink);
+    disc(43, 32, PALETTE.stone);
+    disc(38, 27, PALETTE.gold);
+    disc(36, 25, MARBLE);
+    disc(14, 10, PALETTE.goldDark);
+    disc(12, 8, DRAPE);
+    disc(5, 3, PALETTE.gold);
+    rug(c - 1, top, 3, 3, DRAPE, PALETTE.gold);
+    rug(c - 1, H - 3, 3, 2, DRAPE, PALETTE.gold);
+    flag(c - 2, top);
+    flag(c + 2, top);
+    for (const row of [25, 28, 31]) {
+      column(c - 6, row);
+      column(c + 6, row);
+      bust(15, row);
+      bust(43, row);
+    }
+    for (const [tx, row] of [[18, top], [38, top], [18, 27], [38, 27], [2, top], [54, top]] as const) {
+      sofa(tx, row, 3);
+      for (let i = 0; i < 3; i++) spot("sofa", tx + i, row, "down", "hall");
+    }
+    for (const [tx, row] of [[9, 22], [48, 22], [22, 23], [35, 23], [26, 25], [32, 25], [19, 30], [39, 30], [26, 31], [32, 31]] as const) {
+      spot("chat", tx, row, "down", "hall");
+      spot("chat", tx + 1, row, "down", "hall");
+    }
+    for (const tx of [5, 11, 46, 56]) picture(tx, 20, 2);
+    for (const tx of [16, 21, 36, 41]) picture(tx, 20, 2);
+    plant(1, 23);
+    plant(57, 23);
+    plant(17, 32);
+    plant(41, 32);
+    person("guard-0", c - 3, H - 2, "up");
+  }
+
+  return {
+    key: "court",
+    wing: "House",
+    w: W,
+    h: H,
+    ground,
+    over,
+    rooms,
+    spots,
+    seats,
+    staff,
+    pages: 0,
+    cells,
+    // The count goes on the carpet in front of the Clerk's desk: above it is the Clerk's head.
+    clerk: { x: (c - 9) * T + 8, y: wellDesks * T - 2, labelDy: 28 },
+  };
+}
+
 const NEIGHBOURS = [0, 1, 0, -1];
 
 /** Tiles to walk through from one place to another, corners only. Null when there is no way. */
