@@ -20,6 +20,10 @@ items filed and passed but not yet how often a vote was unanimous or who
 dissented; and re-staging a meeting seats the members now serving, not
 those who voted.
 
+The San Diego City Council was added the same day, from the City Clerk's
+agenda site (`build_sd_council.py`), as the second body and the first city:
+`?world=chamber&place=0666000`.
+
 To add a body: publish its `world/chamber.json.gz`, and add its Census code
 to `public/usa/chambers.json`. To add a state's county maps: run
 `tools/make_counties.mjs` for it, give it a table of county seats there, and

@@ -40,6 +40,14 @@ const PLACE_FLAGS: Record<string, Banner> = {
     box(ctx, x + 2, y + 4, 4, 5, "#e0aa3e");
     box(ctx, x + 3, y + 5, 2, 3, "#3a6fd8");
   },
+  // The City of San Diego: red, white and gold, the colours of Spain, with the city's seal on the white and the year 1542 under it.
+  "0666000": (ctx, x, y) => {
+    box(ctx, x, y, 3, BANNER_H, "#a80f0f");
+    box(ctx, x + 3, y, 2, BANNER_H, "#f4f1e8");
+    box(ctx, x + 5, y, 3, BANNER_H, "#f2c230");
+    box(ctx, x + 3, y + 4, 2, 3, "#e0aa3e");
+    box(ctx, x + 3, y + 8, 2, 1, "#1f1b2e");
+  },
 };
 
 /**

@@ -201,7 +201,7 @@ export function billLabel(bill: { type: string; number: string }): string {
     SCONRES: "S.Con.Res.",
   };
   if (bill.type === "SC" || bill.type === "APP") return `No. ${bill.number}`;
-  if (bill.type === "ITEM") return `File ${bill.number}`;
+  if (bill.type === "ITEM") return /^item /i.test(bill.number) ? bill.number : `File ${bill.number}`; // a docket entry with no file number of its own is "Item 30"
   if (bill.type === "EO") return /^\d/.test(bill.number) ? `Executive Order ${bill.number}` : "Executive order";
   return `${names[bill.type] ?? bill.type} ${bill.number}`;
 }

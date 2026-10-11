@@ -1108,6 +1108,13 @@ label.check input {
     linear-gradient(to bottom, #d8433b 0 33%, #f4f1e8 33% 67%, #2f7a4a 67%);
 }
 
+.wb-pics i.banner.place-0666000 {
+  background:
+    linear-gradient(#1f1b2e, #1f1b2e) 50% 78% / 8px 2px no-repeat,
+    radial-gradient(circle at 50% 42%, #1f1b2e 0 2px, #e0aa3e 2.5px 5px, transparent 5.5px),
+    linear-gradient(to right, #a80f0f 0 33%, #f4f1e8 33% 67%, #f2c230 67%);
+}
+
 .wb-pics i.seal {
   width: 30px;
   border-radius: 50%;

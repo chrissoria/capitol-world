@@ -13,6 +13,28 @@
     "timezone": "America/Los_Angeles",
     "since": "June 2017",
     "map": "#county=06073",
-    "surnames": { "monica-montgomery-steppe": "Montgomery Steppe" }
+    "surnames": {
+      "monica-montgomery-steppe": "Montgomery Steppe"
+    }
+  },
+  "0666000": {
+    "name": "San Diego City Council",
+    "body": "City Council",
+    "short": "the Council",
+    "place": "San Diego",
+    "room": "Council Chambers",
+    "member": "Councilmember",
+    "seat": "District",
+    "file": "https://huggingface.co/datasets/chrissoria/san-diego-council/resolve/main/world/chamber.json.gz",
+    "site": "the City Clerk’s agenda site",
+    "url": "https://sandiego.hylandcloud.com/211agendaonlinecouncil",
+    "timezone": "America/Los_Angeles",
+    "since": "January 2010",
+    "map": "#city=06073.0666000",
+    "surnames": {
+      "marni-von-wilpert": "von Wilpert",
+      "henry-l-foster-iii": "Foster",
+      "monica-montgomery-steppe": "Montgomery Steppe"
+    }
   }
 }
