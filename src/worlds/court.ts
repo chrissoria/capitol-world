@@ -15,6 +15,8 @@ interface CourtFile {
   data_through: string;
   current_term: number;
   justices: { id: string; name: string; last_name: string; appointed_by: string; party: string; start: string; end: string; chief_from: string; born: string }[];
+  /** Every justice there has been, oldest first. Absent in an older file. */
+  history?: { id: string; name: string; last_name: string; appointed_by: string; start: string; end: string; chief_from: string; how_ended: string; born: string; died: string }[];
   terms: { term: number; chief: number; justices: number[]; paid_petitions: number | null; ifp_petitions: number | null; applications: number | null; routine_applications: number }[];
   dispositions: string[];
   issue_areas: string[];
@@ -101,6 +103,8 @@ const applicationId = (term: number, docket: string) => `${term}-app-${docket.to
 
 /** What the card of an item says beyond the common fields, kept beside the bills rather than on them. */
 const notes = new Map<string, { heading: string; rows: { text: string }[] }[]>();
+/** A line on the service of each justice who is no longer sitting, for their card. */
+const lives = new Map<string, string>();
 /** Cases whose argument can be re-staged in the Courtroom, with what to say of it. */
 const sittings = new Map<string, string>();
 /** What to say where a justice's name would go, for an item with no single author. */
@@ -301,6 +305,32 @@ const provider: DataProvider = {
         look: { suit: "#1b1b22", robe: true },
       };
     });
+    // Everyone who had left the Court by this term: the living are in the building in retirement, and the dead
+    // have a plaque. Nobody appointed after the term is here at all.
+    const sittingIds = new Set(members.map((member) => member.id));
+    const former: Member[] = (data.history ?? [])
+      .filter((justice) => !sittingIds.has(justice.id) && justice.end && justice.end < `${term + 1}-07-01`)
+      .reverse()
+      .map((justice) => {
+        const alive = !justice.died || Number(justice.died) > term + 1;
+        const years = `${justice.start.slice(0, 4)}–${justice.end.slice(0, 4)}`;
+        const served = Number(justice.end.slice(0, 4)) - Number(justice.start.slice(0, 4));
+        const title = justice.chief_from ? "Chief Justice" : "Associate Justice";
+        lives.set(justice.id, `${title}, ${years}: ${served} year${served === 1 ? "" : "s"} on the Court, appointed by ${justice.appointed_by}.${justice.born ? ` Born ${justice.born}${alive ? "" : `, died ${justice.died}`}.` : ""}${alive ? "" : " Remembered on a plaque in the Great Hall."}`);
+        return {
+          id: justice.id,
+          name: shortName(justice.name),
+          party: "",
+          state: "",
+          district: null,
+          chamber: "" as const,
+          n_world: 0,
+          n_total: 0,
+          role: alive ? `Retired Justice · served ${years}` : `${title}, ${years}`,
+          group: alive ? "Retired Justice" : "In memory",
+        };
+      })
+      .sort((a, b) => Number(b.group === "Retired Justice") - Number(a.group === "Retired Justice"));
     const count = (key: (bill: Bill) => string) => bills.reduce<Record<string, number>>((all, bill) => ({ ...all, [key(bill)]: (all[key(bill)] ?? 0) + 1 }), {});
     return {
       schema: 1,
@@ -309,7 +339,7 @@ const provider: DataProvider = {
       congress: term,
       window: { world_since: `${term}-10-01`, events_since: eventsSince },
       counts: { total: bills.length, world: bills.length, events: events.length, guessed_locations: 0, by_status: count((b) => b.status), by_kind: count((b) => b.loc.kind) },
-      members,
+      members: [...members, ...former],
       committees: [],
       bills,
       events,
@@ -473,7 +503,7 @@ export const court: WorldDef = {
     noArea: "", // applications, and the cases of a term not yet coded, are left out of the list by subject
     actionHeading: "Where it stands",
     readMore: (bill) => (bill.type === "APP" ? "See its docket at the Court ↗" : /oyez\.org/.test(bill.url) ? "Read about it on Oyez ↗" : "Read more ↗"),
-    memberLine: (member) => `Wrote the opinion of the Court in ${member.n_total.toLocaleString()} case${member.n_total === 1 ? "" : "s"} this term.`,
+    memberLine: (member) => lives.get(member.id) ?? `Wrote the opinion of the Court in ${member.n_total.toLocaleString()} case${member.n_total === 1 ? "" : "s"} this term.`,
     searchHint: "Case name or docket number",
     replayAll: "▶ Replay the term",
   },

@@ -573,7 +573,7 @@ export class WorldScene extends Phaser.Scene {
     const hall = this.layout.enterable?.[0];
     const chamber = this.members.get(memberId)?.chamber || (hall ? (this.layout.sites.get(hall)?.label ?? "building") : "Capitol");
     const inside = this.inside ? this.interior.whereIs(memberId) : null;
-    if (!inside) return `In the ${chamber}`;
+    if (!inside) return this.members.get(memberId)?.group === "In memory" ? `On a plaque in the ${chamber}` : `In the ${chamber}`;
     const building = this.inside === "House" || this.inside === "Senate" ? this.inside : (this.layout.sites.get(this.inside!)?.short ?? this.layout.sites.get(`committee:${this.inside}`)?.short ?? "Committee");
     return `${building} · ${inside}`;
   }

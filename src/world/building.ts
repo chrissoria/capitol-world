@@ -80,6 +80,8 @@ export interface Building {
   confined?: Map<string, string>;
   /** The named people stay in their seats throughout: the justices on the bench. */
   seated?: boolean;
+  /** Small brass plates on the walls, each for one person no longer living, in pixels. */
+  plaques?: { id: string; x: number; y: number; room: string }[];
 }
 
 export interface Leaders {
@@ -1401,6 +1403,9 @@ export function buildSupremeCourt(members: Member[]): Building {
   const { table, chairDown, chairUp, sofa, shelf, plant, lectern, flag, cooler, vending, rug, picture, papers, monitor, bust } = kit;
 
   // The Chief Justice first, then the others as they come, which is by seniority.
+  const retired = members.filter((member) => member.group === "Retired Justice");
+  const remembered = members.filter((member) => member.group === "In memory");
+  members = members.filter((member) => !retired.includes(member) && !remembered.includes(member));
   const chief = members.find((member) => member.group === "Chief Justice") ?? members[0];
   const justices = chief ? [chief, ...members.filter((member) => member !== chief)] : [];
   const behind = 2; // the row the justices walk along behind their chairs
@@ -1802,6 +1807,26 @@ export function buildSupremeCourt(members: Member[]): Building {
     person("guard-0", c - 3, H - 2, "up");
   }
 
+  // The retired justices read in the Library, each at a place of their own.
+  const reading = spots.filter((entry) => entry.kind === "read" && entry.room === "library");
+  retired.slice(0, reading.length).forEach((justice, index) => {
+    reading[index].owner = justice.id;
+    seats.set(justice.id, reading[index]);
+  });
+
+  // A brass plate for each justice who has died, along the north wall of the Great Hall, four to a
+  // stretch of wall and in the order they joined the Court.
+  const plaques: { id: string; x: number; y: number; room: string }[] = [];
+  const wallRow = 20;
+  const faces: number[] = [];
+  for (let tx = 1; tx < W - 1; tx++) if (cells[wallRow * W + tx] === WALL && cells[(wallRow + 1) * W + tx] === FLOOR) faces.push(tx);
+  [...remembered].reverse().slice(0, faces.length * 4).forEach((justice, index) => { // the first Chief Justice at the far left
+    const x = faces[Math.floor(index / 4)] * T + (index % 2 ? 9 : 1);
+    const y = wallRow * T + (index % 4 < 2 ? 5 : 10);
+    framed(g, x, y, 6, 4, PALETTE.gold);
+    plaques.push({ id: justice.id, x: x + 3, y: y + 2, room: "hall" });
+  });
+
   return {
     key: "court",
     wing: "House",
@@ -1815,6 +1840,7 @@ export function buildSupremeCourt(members: Member[]): Building {
     staff,
     pages: 3, // couriers between the Clerk's Office and Chambers
     seated: true,
+    plaques,
     cells,
     // The count goes on the carpet in front of the Clerk's desk: above it is the Clerk's head.
     clerk: { x: (c - 9) * T + 8, y: wellDesks * T - 2, labelDy: 28 },

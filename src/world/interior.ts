@@ -246,6 +246,7 @@ export class InteriorScene extends Phaser.Scene {
     }
     this.makeMembers(members);
     this.makePages();
+    this.makePlaques();
 
     this.ring = this.add.image(0, 0, "ring").setDepth(DEPTH.ring).setVisible(false);
     this.tweens.add({ targets: this.ring, scale: 1.25, duration: 500, yoyo: true, repeat: -1 });
@@ -379,6 +380,18 @@ export class InteriorScene extends Phaser.Scene {
     }
   }
 
+  /** A plaque can be clicked like a person: it opens the card of whoever it remembers. */
+  private makePlaques() {
+    for (const plaque of this.b.plaques ?? []) {
+      const zone = this.add
+        .zone(plaque.x - 4, plaque.y - 3, 8, 6)
+        .setOrigin(0)
+        .setDepth(DEPTH.label)
+        .setInteractive({ cursor: "pointer" });
+      zone.setData("member", plaque.id);
+    }
+  }
+
   /** Pages carry papers between the offices and the rostrum. */
   private makePages() {
     const errands = this.byKind.get("errand") ?? [];
@@ -420,6 +433,7 @@ export class InteriorScene extends Phaser.Scene {
   /** The room a member's figure is in, or null when they are not in this building. */
   whereIs(id: string): string | null {
     if (!this.ready) return null;
+    if (this.b.plaques?.some((plaque) => plaque.id === id)) return "On a plaque";
     const agent = this.agents.get(id);
     if (!agent?.member) return null;
     if (this.committee) return "At the dais";
@@ -439,7 +453,9 @@ export class InteriorScene extends Phaser.Scene {
       return;
     }
     const agent = this.agents.get(id);
+    const plaque = agent ? undefined : this.b.plaques?.find((entry) => entry.id === id);
     if (agent) this.pz.flyTo(agent.sprite.x, agent.sprite.y - 12, Math.max(this.cameras.main.zoom, 2.6), duration);
+    else if (plaque) this.pz.flyTo(plaque.x, plaque.y + 14, Math.max(this.cameras.main.zoom, 4), duration);
   }
 
   setFilter(party: string) {
