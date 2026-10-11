@@ -46,7 +46,7 @@ they are scenery with a caption, listed in `src/world/era.ts`.
 
 ## Worlds
 
-Capitol Hill is one of two maps. The White House world is about executive
+Capitol Hill is one of three maps. The White House world is about executive
 orders. Click the White House to go inside: the President at the desk in the
 Oval Office with the orders on it, the cabinet at its table, the senior staff at
 their desks, the mess and the briefing room. The orders are listed by the
@@ -59,6 +59,19 @@ The President's figure takes its hair, suit and tie colours from the person;
 nothing else about any figure is a likeness. The White House on the Capitol map has a door
 to it, and its gate leads back; the address (`?world=whitehouse&term=39`) says
 which world and period is on show.
+
+The Supreme Court world is about the Court's cases, a term at a time back to
+1946 (`?world=court&term=2025`). A case waits on the argument calendar, sits in
+the Court once argued, and then goes to the building for how it came out:
+affirmed, reversed, vacated, or another way. Emergency applications that asked
+for more than extra time have a docket building of their own. Click the Court
+to go inside, where the justices who sat that term are on the bench. A case's
+card gives the question it asked, what was held, how each justice voted and its
+record. The data is `world/court.json.gz` and `world/text/<term>.json.gz` beside
+[chrissoria/supreme-court-cases](https://huggingface.co/datasets/chrissoria/supreme-court-cases),
+which joins the Supreme Court Database, Oyez and the Court's own docket and is
+licensed CC BY-NC. Subjects and outcomes are the database's coding and are
+missing for the term in progress.
 
 A world is described by one definition in `src/worlds/` (see `types.ts`): where
 its data comes from, how its buildings are laid out, its words, and what its
@@ -107,7 +120,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 
 ## Layout
 
-- `src/worlds/` one definition per world (Capitol Hill, the White House) and the shape they share
+- `src/worlds/` one definition per world (Capitol Hill, the White House, the Supreme Court) and the shape they share
 - `src/data/` snapshot types and loading
 - `src/world/layout.ts` the map: sites, streets and routes
 - `src/world/era.ts` the signs of the times drawn on the lawns of each Congress
