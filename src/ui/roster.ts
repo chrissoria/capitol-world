@@ -4,7 +4,7 @@
 import type { Member, World } from "../data/types";
 import { add, el, put } from "./dom";
 
-export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void, other?: { title: string; items: string }, chambers = { House: "House", Senate: "Senate" }, seatWord = "state") {
+export function createRoster(section: HTMLElement, world: World, whereIs: (id: string) => string, pick: (id: string) => void, other?: { title: string; items: string; note?: string }, chambers = { House: "House", Senate: "Senate" }, seatWord = "state") {
   const select = (id: string, options: [string, string][]) => {
     const node = el("select", { id });
     for (const [value, label] of options) node.append(el("option", { value }, label));
@@ -20,7 +20,7 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
     section,
     el("h2", {}, other?.title ?? "Roster"),
     el("p", { class: "note" }, other
-      ? "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the person’s real whereabouts. The cabinet comes from Senate confirmations; the White House staff from Wikidata, which is less authoritative and not complete."
+      ? other.note ?? "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the person’s real whereabouts. The cabinet comes from Senate confirmations; the White House staff from Wikidata, which is less authoritative and not complete."
       : "Pick anyone to go to them. Rooms are where the figure is in this map’s animation, not the member’s real whereabouts."),
     el("label", { for: "r-search" }, other ? "Find someone" : "Find a member"),
     search,
@@ -31,7 +31,7 @@ export function createRoster(section: HTMLElement, world: World, whereIs: (id: s
   );
 
   const lastName = (member: Member) => member.name.split(" ").slice(-1)[0];
-  const seat = (member: Member) => `${member.party}-${member.state}${member.chamber === "House" && member.district ? `-${member.district}` : ""}`;
+  const seat = (member: Member) => `${member.party ? `${member.party}-` : ""}${member.state}${member.chamber === "House" && member.district ? `-${member.district}` : ""}`;
   const places = new Map<string, HTMLElement>();
 
   function render() {

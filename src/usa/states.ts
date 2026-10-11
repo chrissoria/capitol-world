@@ -116,6 +116,10 @@ export function stateOfCounty(fips: string): StateInfo | undefined {
   return STATES.find((place) => FIPS[place.code] === fips.slice(0, 2));
 }
 
+/** The states whose counties have maps of their own, with the cities on them (tools/make_counties.mjs). */
+const CITY_MAPS = new Set(["CA"]);
+export const hasCities = (place: StateInfo) => CITY_MAPS.has(place.code);
+
 /** Worlds that counties have, by the county's five-digit code. None yet. */
 export const COUNTY_WORLDS: Record<string, WorldKey> = {};
 

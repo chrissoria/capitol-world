@@ -115,6 +115,18 @@ states' data might be had.
 
 Live at <https://christophersoria.com/capitol-world/>.
 
+### A county board or a city council
+
+A local body is one room and no map (`src/worlds/chamber.ts`): the members on
+the dais, the public coming to the microphone, and the meetings, items and
+votes in the side panel. It opens with `?world=chamber&place=06073`, where the
+place is a Census code. San Diego County's Board of Supervisors is the first.
+
+A new body is data and a line, with no code: publish its
+`world/chamber.json.gz` (`build_chamber_snapshot.py` in cat-pol-datasets) and
+add its Census code to `public/usa/chambers.json`. `docs/local_worlds.md` has
+the plan and what is built.
+
 ## The map of the United States
 
 The worlds are reached from a map of the country (`?world=usa`), and the board
@@ -124,6 +136,10 @@ Congress, which it reads from Capitol World's file.
 
 - Click a state to open that state's own map, with its counties; click a
   county for its card. A county's name shows beside the pointer.
+- In California a county opens to a map of its own, with its cities
+  (`tools/make_counties.mjs` makes them from the Census Bureau's boundary
+  files). A triangle is where the county's government sits and a dot is a
+  city hall; a gold one leads into that body's room.
 - A star marks each capital. A gold one leads straight into a world: so far
   Washington's, into Capitol World, and Sacramento's, into California Capitol
   World. A white one opens the capital's card, which says its world is not
@@ -131,7 +147,8 @@ Congress, which it reads from Capitol World's file.
 - The District and the five territories have no map of their own; a click
   opens their card.
 - The address can name a state (`#state=CA`), a county by its Census code
-  (`#county=06037`) or a capital (`#capital=CA`).
+  (`#county=06037`), a city by its county and its own code
+  (`#city=06073.0666000`) or a capital (`#capital=CA`).
 
 To give a state capitol or a county a world, build the world as the others are
 built and name it in `src/usa/states.ts`: in the state's `world`, or in

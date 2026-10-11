@@ -92,7 +92,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   const capitol = Boolean(leg);
   const period = leg?.period ?? "Congress";
   const periods = leg?.periods ?? "Congresses";
-  const officialSite = leg?.site ?? "Congress.gov";
+  const officialSite = def.room?.official() ?? leg?.site ?? "Congress.gov";
   const urlOf = (id: string) => leg?.url?.(id) ?? congressUrl(id);
   useNotes(leg?.explain, period);
   const Items = words.items[0].toUpperCase() + words.items.slice(1);
@@ -143,7 +143,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   const partyName = (party: string) => (party === "R" ? "Republican" : party === "D" ? "Democrat" : party ? "Independent" : "");
   const noArea = words.noArea ?? "Several, or none";
   const memberLine = (member: Member) =>
-    !member.state ? member.name : `${member.name} (${member.party}-${member.state}${member.chamber === "House" && member.district ? `-${member.district}` : ""})`;
+    !member.state ? member.name : `${member.name} (${member.party ? `${member.party}-` : ""}${member.state}${member.chamber === "House" && member.district ? `-${member.district}` : ""})`;
 
   function billRow(bill: Bill, sub?: string) {
     const button = el(
@@ -287,12 +287,20 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       button.addEventListener("click", () => showStage(kind));
       return el("li", {}, button);
     }) : areaRows;
+    // A world that is one room has its meetings on the first page: there is no building to click for them.
+    const roomCalendar = def.room ? el("div", {}) : null;
+    if (def.room && roomCalendar) {
+      const code = def.room.code;
+      void actions.committee(code).then((info) => {
+        if (info && roomCalendar.isConnected) put(roomCalendar, committeeBlock(code, info));
+      });
+    }
     put(sections.inspect, 
       el("h2", {}, words.overview(world).title),
       el("p", {}, words.overview(world).lead),
       el("p", { class: "note" }, capitol
         ? `Click a paper or a building. The ${leg!.chambers.House}, the ${leg!.chambers.Senate} and every committee open up so you can go inside. Drag to move around; scroll or pinch to zoom.`
-        : "Click a paper or a building. Drag to move around; scroll or pinch to zoom."),
+        : def.room ? def.room.hint() : "Click a paper or a building. Drag to move around; scroll or pinch to zoom."),
       ...def.doors.filter((door) => door.site.startsWith("gate")).map((door) => {
         const go = el("button", { type: "button", class: "door" }, door.label);
         go.addEventListener("click", () => actions.travel(door.to));
@@ -303,6 +311,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
             el("p", { class: "note" }, `A few small objects on the lawns place this ${period} in its years. Point at one on the map to read it.`),
             el("ul", {}, ...ERA[world.congress].map((marker) => el("li", {}, marker.note))))
         : null,
+      roomCalendar,
       el("h3", {}, words.overview(world).where),
       el("ul", { class: "list" }, ...rows),
       el("p", { class: "note" }, final || !capitol ? `Pick one to list its ${words.items}.` : `Pick a stage to list its bills. The other ${(world.counts.total - world.counts.world).toLocaleString()} bills of this ${period} are in Search.`),
@@ -460,13 +469,13 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   function meetingRow(code: string, meeting: CommitteeMeeting, info: CommitteeInfo, past: boolean) {
     const facts = [meetingTime(meeting), meeting.type];
     if (meeting.sub) facts.push(info.subcommittees[meeting.sub] ?? "Subcommittee");
-    if (meeting.n_bills) facts.push(`${meeting.n_bills} bill${meeting.n_bills === 1 ? "" : "s"}`);
+    if (meeting.n_bills) facts.push(`${meeting.n_bills} ${plural(meeting.n_bills)}`);
     if (meeting.n_witnesses) facts.push(`${meeting.n_witnesses} witness${meeting.n_witnesses === 1 ? "" : "es"}`);
     const listed = meeting.bills ?? [];
     const billRows = listed.map((id) => {
       const [, type, number] = id.split("-");
       const known = bills.get(id);
-      const button = el("button", { type: "button" }, el("span", { class: "row-title" }, `${billLabel({ type: type.toUpperCase(), number })}${known ? ` · ${known.title}` : ""}`), known ? null : el("span", { class: "row-sub" }, "Not on the map: no action in the last 30 days"));
+      const button = el("button", { type: "button" }, el("span", { class: "row-title" }, `${known ? billLabel(known) : billLabel({ type: (type ?? "").toUpperCase(), number })}${known ? ` · ${known.title}` : ""}`), known ? null : el("span", { class: "row-sub" }, "Not on the map: no action in the last 30 days"));
       button.addEventListener("click", () => {
         if (known) actions.select({ type: "bill", id });
         else openOutside(id);
@@ -482,7 +491,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       meeting.place ? el("p", { class: "note" }, meeting.place) : null,
       meeting.outcomes?.length ? el("p", {}, el("strong", {}, "What was decided")) : null,
       meeting.outcomes?.length ? el("ul", { class: "outcomes" }, ...meeting.outcomes.map((line) => el("li", {}, line))) : null,
-      billRows.length ? el("p", {}, el("strong", {}, past ? "Bills taken up" : "Bills on the agenda")) : null,
+      billRows.length ? el("p", {}, el("strong", {}, past ? `${Items} taken up` : `${Items} on the agenda`)) : null,
       billRows.length ? el("ul", { class: "list" }, ...billRows) : null,
       meeting.n_bills > listed.length ? el("p", { class: "note" }, `…and ${meeting.n_bills - listed.length} more, listed on ${officialSite}.`) : null,
       el("p", {}, stage, " ", el("a", { href: meetingUrl(meeting, info.chamber), target: "_blank", rel: "noopener" }, `Videos and documents on ${officialSite} ↗`)),
@@ -514,11 +523,11 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       {},
       live ? el("p", {}, el("span", { class: "chip stage" }, "In session now"), live.title) : null,
       el("h3", {}, "Calendar: coming up"),
-      coming.length ? el("div", {}, ...coming.map((meeting) => meetingRow(code, meeting, info, false))) : el("p", { class: "note" }, "Nothing is scheduled. Committees usually announce meetings about a week ahead."),
+      coming.length ? el("div", {}, ...coming.map((meeting) => meetingRow(code, meeting, info, false))) : el("p", { class: "note" }, def.room ? def.room.noMeetings() : "Nothing is scheduled. Committees usually announce meetings about a week ahead."),
       el("h3", {}, "Calendar: past meetings"),
       past.length ? el("div", {}, ...shown.map((meeting) => meetingRow(code, meeting, info, true))) : el("p", { class: "note" }, "None on record."),
       older.length ? el("details", { class: "explain" }, el("summary", {}, `${older.length} earlier meetings`), ...older.map((meeting) => meetingRow(code, meeting, info, true))) : null,
-      el("p", { class: "note" }, `${info.n_meetings.toLocaleString()} meetings this ${period}, counting its subcommittees; the latest ${past.length} are here. Re-staging seats every current member and the listed witnesses. Who actually attended is not recorded.`),
+      el("p", { class: "note" }, def.room ? def.room.meetingsNote(info.n_meetings, past.length) : `${info.n_meetings.toLocaleString()} meetings this ${period}, counting its subcommittees; the latest ${past.length} are here. Re-staging seats every current member and the listed witnesses. Who actually attended is not recorded.`),
       roster.length ? el("details", { class: "explain" }, el("summary", {}, `Members (${info.members.length})`), el("ul", { class: "list" }, ...roster)) : null,
     );
   }
@@ -623,7 +632,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       }),
       chairButton ? el("ul", { class: "list" }, el("li", {}, chairButton)) : null,
       committee,
-      site.style === "committee" ? el("h3", {}, "Bills with this committee") : null,
+      site.style === "committee" ? el("h3", {}, def.room ? def.room.here() : "Bills with this committee") : null,
       el("p", {}, here.length
         ? capitol
           ? `${here.length.toLocaleString()} ${active}bill${here.length === 1 ? "" : "s"} ${final ? "ended" : ""} here.`.replace("  ", " ")
@@ -800,7 +809,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
 
   const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats, def.statsNames);
 
-  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: def.tabs.rosterItems ?? words.items }, leg?.chambers, def.tabs.seatWord);
+  const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: def.tabs.rosterItems ?? words.items, note: def.tabs.rosterNote }, leg?.chambers, def.tabs.seatWord);
 
   // ── About ──────────────────────────────────────────────────────────────────
   // Out of the way: a small link under the title opens it.

@@ -19,9 +19,23 @@ import type { StatsNames, StatsWords } from "../ui/stats";
 import type { BoardConfig } from "../ui/whiteboard";
 import type { Layout, Site } from "../world/layout";
 
-export type WorldKey = "capitol" | "whitehouse" | "court" | "california";
-/** Somewhere a door can lead: a world, or the map of the United States (../usa), which is not one. */
-export type Destination = WorldKey | "usa";
+export type WorldKey = "capitol" | "whitehouse" | "court" | "california" | "chamber";
+/** Somewhere a door can lead: a world, the map of the United States (../usa), which is not one, or the chamber of one place's board or council. */
+export type Destination = WorldKey | "usa" | `chamber:${string}`;
+
+/** The words of a world that is one room: a county board or a city council (./chamber.ts). */
+export interface RoomWords {
+  /** The room's key, in the layout and in the meetings file. */
+  code: string;
+  /** What can be clicked, in place of the map's hint. */
+  hint(): string;
+  /** The heading over the items in the room. */
+  here(): string;
+  /** The body's own site, as the place to find more. */
+  official(): string;
+  noMeetings(): string;
+  meetingsNote(total: number, listed: number): string;
+}
 
 export interface Words {
   /** One item and several: "bill", "bills". */
@@ -113,8 +127,10 @@ export interface WorldDef {
   /** A period's name in the picker. */
   periodLabel(entry: CongressEntry): string;
   words: Words;
+  /** Set for a world that is one room and no map: it opens inside, and there is no way out to a map of its own. */
+  room?: RoomWords;
   /** Which tabs the panel shows. */
-  tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string; seatWord?: string };
+  tabs: { roster: boolean; rosterLabel?: string; rosterItems?: string; rosterNote?: string; seatWord?: string };
   /** List the overview by where the items are (the Capitol's way) rather than by their area. */
   overviewBy?: "place";
   /** Whether the overview lists items by their area (a department, say) rather than by where they are. */

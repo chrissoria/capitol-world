@@ -168,7 +168,42 @@ export interface StateFile {
   runs: number[];
 }
 
-export function stateSheet(file: StateFile): Sheet {
+/** One county's file, written by tools/make_counties.mjs: its cities as shapes, and the land in no city as one more. */
+export interface CountyFile {
+  /** The county's five-digit Census code, and its name as the Census has it: "San Diego". */
+  code: string;
+  name: string;
+  w: number;
+  h: number;
+  /** The cities' Census place codes, names and kinds ("city", "town"), in the order the grid numbers them from 1. The land in no city, if there is any, comes last as "<county>-u". */
+  ids: string[];
+  names: string[];
+  kinds: string[];
+  /** Where the county's government sits: the place's name, its code if it is a city here, and the square. */
+  seat: { name: string; place: string; at: [number, number] } | null;
+  runs: number[];
+}
+
+/** Whether a shape on a county's map is the land in no city. */
+export const isUnincorporated = (id: string) => id.endsWith("-u");
+
+const countyFiles = new Map<string, Promise<CountyFile>>();
+
+/** A county's cities, fetched the first time the county is opened. `state` is the state's postal code. */
+export function loadCounty(state: string, fips: string): Promise<CountyFile> {
+  let file = countyFiles.get(fips);
+  if (!file) {
+    file = fetch(`${import.meta.env.BASE_URL}usa/${state}/${fips}.json`).then((response) => {
+      if (!response.ok) throw new Error(`${response.status} for the map of county ${fips}`);
+      return response.json() as Promise<CountyFile>;
+    });
+    file.catch(() => countyFiles.delete(fips));
+    countyFiles.set(fips, file);
+  }
+  return file;
+}
+
+export function stateSheet(file: Pick<StateFile, "code" | "w" | "h" | "ids" | "runs">): Sheet {
   const grid = new Uint16Array(file.w * file.h);
   let at = 0;
   for (let i = 0; i + 1 < file.runs.length; i += 2) {

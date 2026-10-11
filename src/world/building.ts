@@ -82,6 +82,8 @@ export interface Building {
   seated?: boolean;
   /** Small brass plates on the walls, each for one person no longer living, in pixels. */
   plaques?: { id: string; x: number; y: number; room: string }[];
+  /** The way in from outside, for a room the public comes to: people appear and leave here. */
+  door?: { tx: number; ty: number };
 }
 
 export interface Leaders {
@@ -909,6 +911,8 @@ export interface CommitteeRoomSpec {
   seats: CommitteeSeat[];
   /** Set when a meeting is being shown: who is at the witness table and how full the room is. */
   session: { id: string; witnesses: number } | null;
+  /** The room is a county board's or a city council's own chamber, not a committee's hearing room. */
+  council?: boolean;
 }
 
 /** Six looks for a hearing room. Each committee always gets the same one. */
@@ -1121,6 +1125,140 @@ export function buildCommitteeRoom(spec: CommitteeRoomSpec): Building {
     cells,
     clerk: { x: (ix + 4) * T, y: (well + 2) * T - 2 },
     calendar: { x: boardX + 24, y: boardY - 3 },
+  };
+}
+
+const PRESIDES = /\b(chair|mayor|president)\b/i;
+const DEPUTY = /\b(vice|deputy|pro tem)/i;
+
+/**
+ * A county board's or a city council's chamber: the members along one dais in the order of their
+ * seats, whoever presides in the middle; the clerk and counsel at tables below; a lectern and
+ * microphone for the public; and rows of seats behind it, with the door at the back.
+ */
+export function buildCouncilRoom(spec: CommitteeRoomSpec): Building {
+  const accent = "#2e6a8e";
+  const accentDark = "#214f6b";
+  const carpet = "#d9e4ee";
+  const order = [...spec.seats].sort((a, b) => a.rank - b.rank);
+  const presiding = order.findIndex((seat) => PRESIDES.test(seat.title) && !DEPUTY.test(seat.title));
+  if (presiding >= 0) {
+    const [chair] = order.splice(presiding, 1);
+    order.splice(Math.floor(order.length / 2), 0, chair);
+  }
+  const places = Math.max(order.length, 3);
+  const gap = places <= 9 ? 2 : 1; // a small board sits with room between its chairs
+  const daisWidth = (places - 1) * gap + 1;
+  const iw = Math.max(28, daisWidth + 16);
+  const ih = 19;
+  const W = iw + 2;
+  const H = ih + 2;
+
+  const kit = makeKit(W, H, carpet, "#b9cbdc", hash(spec.code));
+  const { ground, over, g, o, cells, rooms, spots, staff, seats, block, spot, person, room, door } = kit;
+  const { table, chairDown, chairUp, plant, flag, cooler, tripod, picture, papers, rug, lectern } = kit;
+
+  const { ix, iy } = room("room", spec.name, 0, 0, W, H, "carpet");
+  const centre = ix + Math.floor(iw / 2);
+  door(centre - 1, H - 1, 2);
+  kit.paint();
+
+  // The wall behind the dais: the body's seal between drapes, and pictures either side.
+  const wallY = (iy - 1) * T;
+  framed(g, (centre - 4) * T, wallY + 5, 9 * T, 11, accent);
+  for (let fold = 0; fold < 9 * T; fold += 6) box(g, (centre - 4) * T + fold, wallY + 6, 1, 9, accentDark);
+  framed(g, centre * T + 2, wallY + 4, 12, 12, PALETTE.gold);
+  box(g, centre * T + 5, wallY + 7, 6, 6, PALETTE.goldDark);
+  for (let tx = ix + 3; tx < centre - 7; tx += 5) picture(tx, iy - 1, 2);
+  for (let tx = centre + 7; tx < ix + iw - 8; tx += 5) picture(tx, iy - 1, 2);
+  flag(ix + 1, iy);
+  flag(ix + iw - 2, iy, accent);
+  // The calendar of meetings, on a board by the dais.
+  const boardX = (ix + iw - 6) * T;
+  const boardY = iy * T;
+  box(o, boardX + 6, boardY + 10, 2, 5, PALETTE.ink);
+  box(o, boardX + 40, boardY + 10, 2, 5, PALETTE.ink);
+  framed(o, boardX, boardY - 18, 48, 30, PALETTE.white);
+  box(o, boardX + 1, boardY - 17, 46, 7, accent);
+  for (let ring = 5; ring < 46; ring += 9) box(o, boardX + ring, boardY - 20, 2, 4, PALETTE.ink);
+  for (let row = 0; row < 3; row++) {
+    for (let col = 0; col < 7; col++) {
+      const mark = (row * 7 + col + hash(spec.code)) % 6;
+      box(o, boardX + 4 + col * 6, boardY - 7 + row * 6, 4, 4, mark === 0 ? accent : mark === 3 && row === 2 ? PALETTE.yellow : PALETTE.stoneEdge);
+    }
+  }
+  block(ix + iw - 6, iy, 3);
+
+  // The dais: one row, the chairs behind a long desk, a nameplate before each.
+  const first = centre - Math.floor(daisWidth / 2);
+  framed(g, (first - 1) * T - 4, iy * T + 4, (daisWidth + 2) * T + 8, 3 * T, "#c9a06a");
+  order.forEach((seat, index) => {
+    const tx = first + index * gap;
+    chairDown(tx, iy + 1, LEATHER_DARK);
+    seats.set(seat.id, spot("seat", tx, iy + 1, "down", "room", { owner: seat.id }));
+  });
+  table(first, iy + 2, daisWidth, WALNUT, "#4f2f18");
+  order.forEach((seat, index) => {
+    const tx = first + index * gap;
+    const leads = PRESIDES.test(seat.title) && !DEPUTY.test(seat.title);
+    box(o, tx * T + 4, (iy + 2) * T - 4, 8, 3, leads ? PALETTE.gold : PALETTE.wall);
+    box(o, tx * T + 12, (iy + 2) * T - 9, 1, 6, PALETTE.ink); // microphone
+    if (leads) {
+      framed(o, tx * T + 3, (iy + 2) * T + 1, 9, 4, WOOD_DARK); // the gavel
+      box(o, tx * T + 6, (iy + 2) * T - 1, 3, 2, WOOD);
+    }
+  });
+
+  // Below the dais: the clerk with the agenda on one side, counsel and staff on the other.
+  const well = iy + 4;
+  person("clerk-0", ix + 3, well, "down");
+  table(ix + 2, well + 1, 4, WOOD, WOOD_DARK);
+  person("clerk-1", ix + iw - 5, well, "down");
+  person("clerk-2", ix + iw - 3, well, "down");
+  table(ix + iw - 6, well + 1, 4, WOOD, WOOD_DARK);
+  papers((ix + iw - 5) * T + 3, (well + 1) * T - 3);
+
+  // The lectern, where anyone may speak to the board: a microphone, a timer light, a rug to stand on.
+  rug(centre - 2, well + 3, 5, 3, accent, carpet);
+  lectern(centre, well + 3);
+  box(o, centre * T + 12, (well + 3) * T - 12, 1, 7, PALETTE.ink);
+  box(o, centre * T + 2, (well + 3) * T - 9, 3, 3, "#58a85f");
+  spot("speak", centre, well + 4, "up", "room");
+  tripod(ix + iw - 2, well + 4);
+  tripod(ix + 1, well + 4);
+
+  // The public seats, either side of the aisle that runs from the door to the lectern.
+  const firstRow = well + 7;
+  for (let row = firstRow; row <= firstRow + 4; row += 2) {
+    for (let tx = ix + 3; tx <= ix + iw - 4; tx++) {
+      if (tx >= centre - 1 && tx <= centre + 1) continue;
+      chairUp(tx, row, "#3d3f4a", "#56607a");
+      spot("hearing", tx, row, "up", "room");
+    }
+  }
+  plant(ix, iy + ih - 1);
+  plant(ix + iw - 1, iy + ih - 1);
+  cooler(ix, well + 6);
+  // Somewhere for a member of staff to carry papers to and from.
+  spot("errand", ix + 6, well + 1, "up", "room");
+  spot("errand", ix + iw - 8, well + 1, "up", "room");
+
+  return {
+    key: `${spec.code}:council:${spec.session?.id ?? "idle"}`,
+    wing: "House",
+    w: W,
+    h: H,
+    ground,
+    over,
+    rooms,
+    spots,
+    seats,
+    staff,
+    pages: 1,
+    cells,
+    clerk: { x: (ix + 4) * T, y: (well + 1) * T - 2 },
+    calendar: { x: boardX + 24, y: boardY - 3 },
+    door: { tx: centre, ty: H - 1 },
   };
 }
 

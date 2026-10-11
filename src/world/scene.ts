@@ -556,10 +556,11 @@ export class WorldScene extends Phaser.Scene {
             chamber: info?.chamber ?? site?.wing ?? "House",
             seats: info?.members ?? [],
             session: meeting ? { id: meeting.id, witnesses: meeting.n_witnesses } : null,
+            council: this.layout.council === place,
           },
         });
         const note = !meeting
-          ? unbuilt ? `this ${this.layout.period ?? "Congress"}’s committee records are not published yet` : this.world.final ? `this ${this.layout.period ?? "Congress"} has ended` : "not meeting right now"
+          ? this.layout.council === place ? "the comings and goings are animation" : unbuilt ? `this ${this.layout.period ?? "Congress"}’s committee records are not published yet` : this.world.final ? `this ${this.layout.period ?? "Congress"} has ended` : "not meeting right now"
           : meetingId
             ? `re-staging the ${meeting.type.toLowerCase()} of ${meetingTime(meeting).split(",").slice(0, 2).join(",")}`
             : "in session now";
@@ -570,6 +571,7 @@ export class WorldScene extends Phaser.Scene {
   /** Where a member's figure is right now, in a few words. */
   whereIs(memberId: string): string {
     if (this.memberSprites.has(memberId)) return "Out on the map, carrying a bill";
+    if (this.layout.council && this.members.get(memberId)?.left) return "No longer on the body";
     const hall = this.layout.enterable?.[0];
     const chamber = this.chamberName(this.members.get(memberId)?.chamber ?? "") || (hall ? (this.layout.sites.get(hall)?.label ?? "building") : "Capitol");
     const inside = this.inside ? this.interior.whereIs(memberId) : null;
@@ -584,7 +586,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   leave() {
-    if (!this.inside) return;
+    if (!this.inside || this.layout.council) return; // a world that is one room has nowhere else
     this.inside = null;
     this.view = null;
     this.interior.ready = false;

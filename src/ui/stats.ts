@@ -182,8 +182,8 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
   add(
     section,
     el("h2", {}, "Statistics"),
-    el("label", { for: "s-from" }, cfg?.periods ?? Periods),
-    el("div", { class: "pair" }, from, el("span", {}, "to"), to),
+    // A world with one period, a board with no terms of its own, has nothing to pick between.
+    ...(cfg?.periods === "" ? [] : [el("label", { for: "s-from" }, cfg?.periods ?? Periods), el("div", { class: "pair" }, from, el("span", {}, "to"), to)]),
     el("label", { for: "s-period" }, cfg ? `${cfg.verb[0].toUpperCase()}${cfg.verb.slice(1)} in` : "Introduced in"),
     period,
     ...(cfg ? [] : [el("label", { for: "s-kind" }, "Kind of measure"), kind, el("label", { for: "s-chamber" }, "Started in"), chamber]),

@@ -28,12 +28,17 @@ export function drawSea(): HTMLCanvasElement {
 
 const STAR = ["....#....", "....#....", "...###...", "#########", ".#######.", "..#####..", "..#####..", ".###.###.", ".#.....#."];
 
-/** A capital's star, with a dark edge: `size` pixels to each square of the pattern. */
-export function drawStar(size: number, color: string): HTMLCanvasElement {
+/** The marks for the other seats of government: a triangle where a county's sits, a dot for a city hall. */
+const TRIANGLE = ["....#....", "....#....", "...###...", "...###...", "..#####..", "..#####..", ".#######.", ".#######.", "#########"];
+const DOT = [".........", "...###...", "..#####..", ".#######.", ".#######.", ".#######.", "..#####..", "...###...", "........."];
+export const MARKS = { star: STAR, triangle: TRIANGLE, dot: DOT };
+
+/** A capital's star, or another seat's mark, with a dark edge: `size` pixels to each square of the pattern. */
+export function drawStar(size: number, color: string, pattern: string[] = STAR): HTMLCanvasElement {
   const edge = size;
   const [element, ctx] = canvas(9 * size + edge * 2, 9 * size + edge * 2);
   const paint = (dx: number, dy: number, fill: string) =>
-    STAR.forEach((line, row) => {
+    pattern.forEach((line, row) => {
       [...line].forEach((mark, col) => {
         if (mark === "#") box(ctx, edge + col * size + dx, edge + row * size + dy, size, size, fill);
       });

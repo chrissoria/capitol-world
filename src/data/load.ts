@@ -59,6 +59,8 @@ export interface DataProvider {
   line(): Promise<CongressEntry[]>;
   /** The fuller text of an item whose summary on the map was cut short; null when there is none. */
   text?(id: string): Promise<string | null>;
+  /** Rosters and meetings, for a world that has rooms to hold them in. */
+  committees?(): Promise<CommitteeFile>;
 }
 
 let provider: DataProvider | null = null;
@@ -185,7 +187,7 @@ let committeeFile: Promise<CommitteeFile> | undefined;
 
 /** Committee rosters and meetings, loaded the first time a committee is opened. */
 export function loadCommittees(): Promise<CommitteeFile> {
-  if (provider) return Promise.reject(new Error("this world has no committees"));
+  if (provider) return provider.committees ? (committeeFile ??= provider.committees()) : Promise.reject(new Error("this world has no committees"));
   committeeFile ??= fromEither<CommitteeFile>(archived || source.gzipped ? "committees.json.gz" : "committees.json").then((result) => result.data);
   return committeeFile;
 }

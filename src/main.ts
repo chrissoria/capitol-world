@@ -6,8 +6,8 @@ import { createCalendar } from "./ui/calendar";
 import { createPanel } from "./ui/panel";
 import { startGame, type Target, type WorldScene } from "./world/scene";
 import { openAtlas } from "./usa";
-import { WORLDS, atlasInAddress, worldInAddress } from "./worlds";
-import type { Destination } from "./worlds/types";
+import { WORLDS, atlasInAddress, chamberWayOut, placeInAddress, worldInAddress } from "./worlds";
+import type { Destination, WorldKey } from "./worlds/types";
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -33,6 +33,7 @@ useSource(def.source);
 // The map of the United States is not a world: it has no items of its own, and borrows the Capitol's members.
 let atlas = atlasInAddress();
 if (atlas) setCongress(null);
+let shownPlace = placeInAddress(); // whose chamber is on show, when one is
 let life = new AbortController(); // ends the listeners of the Congress on show
 let showing: { destroy(): void } | undefined;
 let opened = 0;
@@ -46,7 +47,9 @@ function switchTo(congress: number | null, address: "push" | "replace" | "keep" 
   $("app").replaceWith(untouched.app.cloneNode(true));
   $("about").replaceWith(untouched.about.cloneNode(true));
   atlas = world === "usa";
-  const next = world === "usa" ? WORLDS.capitol : WORLDS[world];
+  // A chamber is some place's: "chamber:06073" on the way in, and the address's own place when only the view changes.
+  const place = world.startsWith("chamber") ? (world.split(":")[1] ?? placeInAddress()) : null;
+  const next = world === "usa" ? WORLDS.capitol : place ? WORLDS.chamber : WORLDS[world as WorldKey];
   if (next.key !== def.key) {
     def = next;
     useProvider(def.provider);
@@ -54,11 +57,13 @@ function switchTo(congress: number | null, address: "push" | "replace" | "keep" 
   }
   if (atlas) congress = null;
   setCongress(congress);
+  shownPlace = atlas ? null : place;
   if (address !== "keep") {
     const query = new URLSearchParams(location.search);
-    for (const name of ["congress", "term", "session", "world"]) query.delete(name);
+    for (const name of ["congress", "term", "session", "world", "place"]) query.delete(name);
     if (atlas) query.set("world", "usa");
     else if (def.key !== "capitol") query.set("world", def.key);
+    if (!atlas && place) query.set("place", place);
     if (congress !== null) query.set(def.periodParam, String(congress));
     const search = query.toString();
     const next = `${location.pathname}${search ? `?${search}` : ""}${address === "replace" ? location.hash : hash}`;
@@ -70,7 +75,7 @@ function switchTo(congress: number | null, address: "push" | "replace" | "keep" 
 
 // Back and forward across a change of Congress.
 addEventListener("popstate", () => {
-  if (atlasInAddress() !== atlas || worldInAddress().key !== def.key || congressInAddress() !== archived) switchTo(congressInAddress(), "keep", atlasInAddress() ? "usa" : worldInAddress().key);
+  if (atlasInAddress() !== atlas || worldInAddress().key !== def.key || congressInAddress() !== archived || (def.key === "chamber" && placeInAddress() !== shownPlace)) switchTo(congressInAddress(), "keep", atlasInAddress() ? "usa" : worldInAddress().key);
 });
 
 /** The music button, on a page that has just been built. */
@@ -173,8 +178,9 @@ async function main() {
     onPlace(inside) {
       calendar.close();
       // The chambers have their own tune, and so do the committee rooms.
-      music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
+      music.setTrack(!inside ? "map" : def.room ? "committee" : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
       backButton.hidden = !inside;
+      if (def.room) backButton.textContent = "← Map"; // a world that is one room has no map of its own: the way out is to the country's
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       storyButton.hidden = Boolean(inside) || !scene.hasStory || !def.words.replayAll;
       $("fit").textContent = inside ? "Whole building" : "Whole map";
@@ -193,11 +199,12 @@ async function main() {
         whereIs: (id) => scene.whereIs(id),
         lookAt: (key) => scene.lookAt(key),
         learning: (open) => music.setTrack(open ? "library" : "map"),
-        travel: (to) => switchTo(null, "push", to as Destination),
+        travel: (to) => switchTo(null, "push", to as Destination, def.room && to === "usa" ? chamberWayOut() : ""),
         mapView: () => (scene.textures.exists("ground") ? (scene.textures.get("ground").getSourceImage() as HTMLCanvasElement) : null),
       }, def);
       replayButton.hidden = !scene.hasEvents;
       storyButton.hidden = !scene.hasStory || !def.words.replayAll;
+      if (def.room) scene.enter(def.room.code);
       const initial = targetFromHash();
       if (initial) scene.select(initial);
       else if (scene.hasEvents && !reducedMotion) scene.replay();
@@ -208,7 +215,7 @@ async function main() {
   if (import.meta.env.DEV) (window as unknown as { scene: WorldScene }).scene = scene;
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
   storyButton.addEventListener("click", () => scene.replay(true));
-  backButton.addEventListener("click", () => scene.leave());
+  backButton.addEventListener("click", () => (def.room ? switchTo(null, "push", "usa", chamberWayOut()) : scene.leave()));
   addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (calendar.isOpen) calendar.close();

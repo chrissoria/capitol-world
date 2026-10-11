@@ -4,7 +4,7 @@
 import Phaser from "phaser";
 import type { Member, World } from "../data/types";
 import { PALETTE, SPRITE_H, box, canvas, drawFigures, framed, type Look } from "./art";
-import { T, buildBuilding, buildCommitteeRoom, buildSupremeCourt, buildWhiteHouse, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
+import { T, buildBuilding, buildCommitteeRoom, buildCouncilRoom, buildSupremeCourt, buildWhiteHouse, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
 import { panZoom, type PanZoom } from "./camera";
 
 export interface InteriorHooks {
@@ -56,13 +56,16 @@ const EMOTES: Partial<Record<SpotKind, string>> = {
   read: "book",
 };
 
+/** How many of the public a council's chamber has coming and going. The first eight also fill the seats of a hearing. */
+const VISITORS = 16;
+
 const STAFF: { key: string; look: Look }[] = [
   ...[0, 1, 2].map((i) => ({ key: `clerk-${i}`, look: { seed: `clerk-${i}`, party: null } })),
   ...[0, 1].map((i) => ({ key: `server-${i}`, look: { seed: `server-${i}`, party: null, coat: "#f2f2f2", cap: "#ffffff" } })),
   ...[0, 1, 2, 3, 4, 5].map((i) => ({ key: `reporter-${i}`, look: { seed: `reporter-${i}`, party: null } })),
   { key: "guard-0", look: { seed: "guard-0", party: null, coat: "#2c3a5a", cap: "#1f2a44" } },
   { key: "librarian-0", look: { seed: "librarian-0", party: null, coat: "#7a4f6a" } },
-  ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => ({ key: `guest-${i}`, look: { seed: `guest-${i}`, party: null } })),
+  ...Array.from({ length: VISITORS }, (_, i) => ({ key: `guest-${i}`, look: { seed: `guest-${i}`, party: null } })),
   ...[0, 1, 2, 3, 4].map((i) => ({ key: `page-${i}`, look: { seed: `page-${i}`, party: null, coat: "#2f4a7a" } })),
 ];
 
@@ -84,6 +87,8 @@ interface Agent {
   speed: number;
   phase: number;
   bob: boolean;
+  /** One of the public in a council's chamber: comes in by the door, sits, may speak, and leaves. */
+  visitor?: boolean;
 }
 
 const seconds = (min: number, max: number) => (min + Math.random() * (max - min)) * 1000;
@@ -129,6 +134,8 @@ export class InteriorScene extends Phaser.Scene {
   private speaker: Agent | null = null;
   private nextSpeakerAt = 0;
   private plans = new Map<string, Building>();
+  /** Where the public come in and go out, in a room that has a door for them. */
+  private doorway: Spot | null = null;
   private b!: Building;
   private agents = new Map<string, Agent>();
   private byKind = new Map<SpotKind, Spot[]>();
@@ -170,8 +177,9 @@ export class InteriorScene extends Phaser.Scene {
       // A committee room is drawn afresh each visit: it differs with the meeting being shown.
       const known = new Map(this.world.members.map((member) => [member.id, member]));
       const spec = { ...this.committee, seats: this.committee.seats.filter((seat) => known.has(seat.id)) };
-      plan = buildCommitteeRoom(spec);
-      members = spec.session ? spec.seats.map((seat) => known.get(seat.id)!) : [];
+      plan = spec.council ? buildCouncilRoom(spec) : buildCommitteeRoom(spec);
+      // A committee's members are in its room only for a meeting; a board is on its dais whenever the room is open.
+      members = spec.session || spec.council ? spec.seats.map((seat) => known.get(seat.id)!) : [];
     } else if (this.place === "whitehouse") {
       // Everyone on the roster has a seat: the President in the Oval Office, the cabinet at its table, the staff at their desks.
       members = this.world.members;
@@ -248,6 +256,7 @@ export class InteriorScene extends Phaser.Scene {
       board.setData("calendar", true);
     }
     this.makeMembers(members);
+    this.makeVisitors();
     this.makePages();
     this.makePlaques();
 
@@ -407,6 +416,54 @@ export class InteriorScene extends Phaser.Scene {
     }
   }
 
+  /** The public: some already in their seats when the room opens, the rest arriving over the next minute. */
+  private makeVisitors() {
+    const door = this.b.door;
+    const seats = this.byKind.get("hearing") ?? [];
+    this.doorway = door && seats.length ? { tx: door.tx, ty: door.ty, dx: 0, kind: "errand", face: "up", room: "room", taken: null } : null;
+    if (!this.doorway) return;
+    for (let i = 0; i < Math.min(VISITORS, Math.floor(seats.length / 2)); i++) {
+      const agent = this.makeAgent(`guest-${i}`, null, "staff", this.doorway, WALK_SPEED * (0.85 + Math.random() * 0.3));
+      agent.visitor = true;
+      const seat = i % 2 === 0 ? this.free("hearing", agent) : null;
+      if (seat) {
+        seat.taken = agent.id;
+        agent.at = seat;
+        agent.stay = seconds(4, 50);
+        this.arrive(agent);
+        agent.steps.push({ spot: this.doorway, stay: seconds(6, 45) });
+      } else {
+        agent.sprite.setVisible(false);
+        agent.until = seconds(1, 45);
+      }
+    }
+  }
+
+  /** What one of the public does on a visit: a seat, for some a turn at the microphone, and out again. */
+  private planVisit(agent: Agent) {
+    const door = this.doorway!;
+    if (agent.at !== door) {
+      agent.steps.push({ spot: door, stay: seconds(6, 45) });
+      return;
+    }
+    const seat = this.free("hearing", agent);
+    if (!seat) return;
+    seat.taken = agent.id;
+    agent.steps.push({ spot: seat, stay: seconds(10, 45) });
+    // The microphone is held from now, so only one person at a time is on the way to it.
+    const microphone = Math.random() < 0.6 ? this.free("speak", agent) : null;
+    if (microphone) {
+      microphone.taken = agent.id;
+      agent.steps.push({ spot: microphone, stay: seconds(9, 18) });
+      const after = Math.random() < 0.5 ? this.free("hearing", agent) : null;
+      if (after) {
+        after.taken = agent.id;
+        agent.steps.push({ spot: after, stay: seconds(8, 30) });
+      }
+    }
+    agent.steps.push({ spot: door, stay: seconds(6, 45) });
+  }
+
   private makeCamera() {
     const camera = this.cameras.main;
     const pad = 700;
@@ -540,7 +597,8 @@ export class InteriorScene extends Phaser.Scene {
       agent.until = this.clock + seconds(20, 60);
       return;
     }
-    if (!agent.steps.length) {
+    if (agent.visitor && !agent.steps.length) this.planVisit(agent);
+    if (!agent.steps.length && !agent.visitor) {
       if (!agent.member) {
         const errand = this.free("errand", agent);
         if (errand) {
@@ -555,7 +613,7 @@ export class InteriorScene extends Phaser.Scene {
       agent.until = this.clock + seconds(8, 20);
       return;
     }
-    if (agent.member) {
+    if (agent.member || agent.visitor) {
       agent.emote?.destroy();
       agent.prop?.destroy();
       agent.emote = agent.prop = null;
@@ -577,6 +635,7 @@ export class InteriorScene extends Phaser.Scene {
     agent.at = step.spot;
     agent.stay = step.stay;
     agent.moving = true;
+    agent.sprite.setVisible(true);
   }
 
   private setFrame(agent: Agent, back: boolean, flip = false) {
@@ -597,6 +656,12 @@ export class InteriorScene extends Phaser.Scene {
     agent.sprite.setPosition(at.x, at.y).setOrigin(0.5, 1).setDepth(DEPTH.sorted + at.y / 10000);
     this.setFrame(agent, spot.face === "up");
     this.attach(agent);
+    if (agent.visitor) {
+      // Out of the door is out of sight; at the microphone, they are speaking.
+      agent.sprite.setVisible(spot !== this.doorway);
+      if (spot.kind === "speak") agent.emote = this.add.image(at.x + 7, at.y - SPRITE_H, "emote-talk").setOrigin(0.5, 1).setDepth(DEPTH.emote);
+      return;
+    }
     if (!agent.member) return;
     agent.bob = spot.kind === "gym";
     const emote = EMOTES[spot.kind] ?? (spot.kind === "hearing" && spot.face === "down" ? "talk" : undefined);
@@ -652,7 +717,7 @@ export class InteriorScene extends Phaser.Scene {
         agent.emote.setVisible(showEmotes && (!talking || (this.clock + agent.phase) % 2600 < 1300));
       }
     }
-    if ((this.committee?.session || this.sitting) && this.clock >= this.nextSpeakerAt) this.passTheFloor();
+    if ((this.committee?.session || this.committee?.council || this.sitting) && this.clock >= this.nextSpeakerAt) this.passTheFloor();
     this.applyLod();
     if (this.selectedId) {
       const agent = this.agents.get(this.selectedId);

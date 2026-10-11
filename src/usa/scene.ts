@@ -5,7 +5,7 @@
 import Phaser from "phaser";
 import { PALETTE } from "../world/art";
 import { panZoom, type PanZoom } from "../world/camera";
-import { CELL, SEA, drawLand, drawSea, drawStar } from "./art";
+import { CELL, MARKS, SEA, drawLand, drawSea, drawStar } from "./art";
 import type { Shape, Sheet } from "./sheet";
 
 /** A name on the map. Squares are the sheet's own; a name with no place of its own goes on its shape, when it fits. */
@@ -32,6 +32,8 @@ export interface StarSpec {
   gold: boolean;
   /** Drawn larger: the one capital on a state's own map, or one with a world. */
   big: boolean;
+  /** What stands there, when it is not a capital: a triangle for a county's seat, a dot for a city hall. */
+  mark?: "triangle" | "dot";
 }
 
 export interface SheetView {
@@ -108,10 +110,12 @@ export class AtlasScene extends Phaser.Scene {
 
   create() {
     this.textures.addCanvas("sea", drawSea());
-    this.textures.addCanvas("star", drawStar(1, PALETTE.white));
-    this.textures.addCanvas("star-big", drawStar(2, PALETTE.white));
-    this.textures.addCanvas("star-gold", drawStar(1, PALETTE.yellow));
-    this.textures.addCanvas("star-gold-big", drawStar(2, PALETTE.yellow));
+    for (const [mark, pattern] of Object.entries(MARKS)) {
+      this.textures.addCanvas(mark, drawStar(1, PALETTE.white, pattern));
+      this.textures.addCanvas(`${mark}-big`, drawStar(2, PALETTE.white, pattern));
+      this.textures.addCanvas(`${mark}-gold`, drawStar(1, PALETTE.yellow, pattern));
+      this.textures.addCanvas(`${mark}-gold-big`, drawStar(2, PALETTE.yellow, pattern));
+    }
     const far = 4096; // sea out past the edges, enough for the widest screen and the largest sheet
     this.add.tileSprite(-far, -far, far * 3, far * 3, "sea").setOrigin(0).setDepth(DEPTH.sea);
     this.glow = this.add.graphics().setDepth(DEPTH.glow);
@@ -193,7 +197,7 @@ export class AtlasScene extends Phaser.Scene {
     }
     if (view.heading) this.heading = this.text(view.heading.text, 11).setOrigin(0.5, 0).setPosition(view.heading.x * CELL, view.heading.y * CELL);
     for (const spec of view.stars) {
-      const image = this.add.image(spec.x * CELL, spec.y * CELL, `star${spec.gold ? "-gold" : ""}${spec.big ? "-big" : ""}`).setDepth(DEPTH.star);
+      const image = this.add.image(spec.x * CELL, spec.y * CELL, `${spec.mark ?? "star"}${spec.gold ? "-gold" : ""}${spec.big ? "-big" : ""}`).setDepth(DEPTH.star);
       this.stars.push({ spec, image, reach: spec.big ? 14 : 9 });
     }
 

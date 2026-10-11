@@ -1,8 +1,29 @@
 # Counties and cities: the map down to the city, and a one-room world
 
-Written 2026-10-10. A plan, not yet built. San Diego County is the first
-county, and its data is being collected (`build_sd_county.py` in
-cat-pol-datasets).
+Written 2026-10-10 as a plan. Steps 1 to 3 of the order of work at the end
+were built on 2026-10-11, with San Diego County as the first body:
+
+- `build_chamber_snapshot.py` (cat-pol-datasets) writes `world/chamber.json.gz`
+  beside a body's dataset, and `build_sd_county.py` runs it after publishing.
+- `src/worlds/chamber.ts` is the one-room world, `buildCouncilRoom` its room,
+  and `public/usa/chambers.json` the registry. The address is
+  `?world=chamber&place=06073`.
+- `tools/make_counties.mjs` writes a map of each county's cities from the
+  Census Bureau's boundary files; California's 58 are in `public/usa/CA/`.
+  A click on a California county opens its map; the address is
+  `?world=usa#county=06073`, or `#city=06073.0666000` for one city on it.
+
+Where what was built differs from the plan below: a county's seat is a
+triangle on the county's own map, and on the state's map only a county whose
+board has a room wears one; the Stats tab is the shared one, so it counts
+items filed and passed but not yet how often a vote was unanimous or who
+dissented; and re-staging a meeting seats the members now serving, not
+those who voted.
+
+To add a body: publish its `world/chamber.json.gz`, and add its Census code
+to `public/usa/chambers.json`. To add a state's county maps: run
+`tools/make_counties.mjs` for it, give it a table of county seats there, and
+add its code to `CITY_MAPS` in `src/usa/states.ts`.
 
 ## The map: country, state, county, city
 

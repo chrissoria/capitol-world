@@ -1,0 +1,18 @@
+{
+  "06073": {
+    "name": "San Diego County Board of Supervisors",
+    "body": "Board of Supervisors",
+    "short": "the Board",
+    "place": "San Diego County",
+    "room": "Board Chamber",
+    "member": "Supervisor",
+    "seat": "District",
+    "file": "https://huggingface.co/datasets/chrissoria/sd-county-ordinances/resolve/main/world/chamber.json.gz",
+    "site": "the County’s Legistar site",
+    "url": "https://sdcounty.legistar.com/",
+    "timezone": "America/Los_Angeles",
+    "since": "June 2017",
+    "map": "#county=06073",
+    "surnames": { "monica-montgomery-steppe": "Montgomery Steppe" }
+  }
+}

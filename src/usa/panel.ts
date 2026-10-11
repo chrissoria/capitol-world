@@ -6,21 +6,26 @@ import type { Member } from "../data/types";
 import { ordinal } from "../data/types";
 import { el, put } from "../ui/dom";
 import { WORLDS } from "../worlds";
-import type { WorldKey } from "../worlds/types";
-import type { StateFile } from "./sheet";
-import { COUNTY_WORLDS, STATE, STATES, countyName, countyWords, hasCounties, type StateInfo } from "./states";
+import type { ChamberEntry } from "../worlds/chamber";
+import type { Destination, WorldKey } from "../worlds/types";
+import { isUnincorporated, type CountyFile, type StateFile } from "./sheet";
+import { COUNTY_WORLDS, STATE, STATES, countyName, countyWords, hasCities, hasCounties, type StateInfo } from "./states";
 
 export interface AtlasActions {
   /** Back to the map of the whole country, with nothing picked. */
   home(): void;
   /** Open a place: a state's own map, or the card of the District or a territory. */
   open(code: string): void;
-  /** Pick a county on the state map that is open (null for none). */
+  /** Pick a county on the state map that is open (null for none). Where counties have maps of their own, this opens the county's. */
   county(fips: string | null): void;
+  /** Pick a city on the county map that is open (null for none). */
+  city(id: string | null): void;
+  /** Back from a county's map to its state's. */
+  leaveCounty(): void;
   /** Go to a place's capital: into its world if it has one. */
   capital(code: string): void;
-  /** Go into a world, to one of its people if `member` is given. */
-  travel(world: WorldKey, member?: string): void;
+  /** Go into a world, to one of its people if `member` is given; or into the chamber of a county's board or a city's council. */
+  travel(world: Destination, member?: string): void;
 }
 
 const KIND: Record<StateInfo["kind"], string> = { state: "State", district: "Federal district", territory: "Territory" };
@@ -36,6 +41,15 @@ export function createAtlasPanel(actions: AtlasActions) {
   for (const tab of document.querySelectorAll<HTMLElement>(".tab")) tab.hidden = tab !== section;
 
   let known = false; // whether the list of members has arrived
+  let chambers: Record<string, ChamberEntry> = {}; // the boards and councils that have a room, by Census code
+  /** The way into a place's chamber, if it has one. */
+  const chamberDoor = (code: string) => {
+    const entry = chambers[code];
+    if (!entry) return null;
+    const go = el("button", { type: "button", class: "door" }, `Enter the ${entry.room} →`);
+    go.addEventListener("click", () => actions.travel(`chamber:${code}`));
+    return el("p", {}, go);
+  };
   const delegation = new Map<string, { senators: Member[]; house: Member[] }>();
 
   /** What the people a place sends to the House are called. */
@@ -179,14 +193,14 @@ export function createAtlasPanel(actions: AtlasActions) {
       const counties = file.ids
         .map((fips, n) => ({ fips, ...countyName(fips, file.names[n]) }))
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((county) => row(county.name, "", () => actions.county(county.fips), COUNTY_WORLDS[county.fips] ? "★" : ""));
+        .map((county) => row(county.name, "", () => actions.county(county.fips), COUNTY_WORLDS[county.fips] ? "★" : chambers[county.fips] ? "▲" : ""));
       const capital = el("button", { type: "button", class: place.world ? "door" : "" }, place.world ? `Enter ${WORLDS[place.world].name} →` : `★ ${place.capital}, the capital`);
       capital.addEventListener("click", () => actions.capital(place.code));
       show(
         back("United States", actions.home),
         el("div", { class: "kicker" }, KIND[place.kind]),
         el("h2", {}, place.name),
-        el("p", { class: "note" }, `Click one of its ${many} on the map, or the star on ${place.capital}.`),
+        el("p", { class: "note" }, `Click one of its ${many} on the map, or the star on ${place.capital}.${hasCities(place) ? ` Each ${countyWords(place.code)[0]} opens to a map of its cities. A gold triangle is a county board you can walk in on.` : ""}`),
         el("p", {}, capital),
         facts(place, [fact(many.replace(/^./, (first) => first.toUpperCase()), String(file.ids.length))]),
         ...people(place),
@@ -205,6 +219,55 @@ export function createAtlasPanel(actions: AtlasActions) {
         el("h2", {}, county.name),
         world ? door(world) : el("p", { class: "note" }, `${county.name} has no world of its own yet. When it does, this is where the way in will be.`),
         el("dl", { class: "facts" }, fact("State", place.name), fact("Census code", fips)),
+      );
+    },
+
+    /** The boards and councils that have a room have arrived. */
+    setChambers(list: Record<string, ChamberEntry>) {
+      chambers = list;
+    },
+
+    /** A county's own map: its cities, and the way in to its board where there is one. */
+    countyMap(place: StateInfo, file: CountyFile) {
+      const county = countyName(file.code, file.name);
+      const cities = file.ids
+        .map((id, n) => ({ id, name: file.names[n], kind: file.kinds[n] }))
+        .filter((city) => !isUnincorporated(city.id))
+        .map((city) => row(city.name, city.id === file.seat?.place ? "County seat" : "", () => actions.city(city.id), chambers[city.id] ? "●" : ""));
+      const open = file.ids.find(isUnincorporated);
+      show(
+        back(place.name, actions.leaveCounty),
+        el("div", { class: "kicker" }, county.kind),
+        el("h2", {}, county.name),
+        chamberDoor(file.code) ?? el("p", { class: "note" }, `${county.name}’s board has no room here yet. When it does, the triangle on its seat will turn gold and lead in.`),
+        el("p", { class: "note" }, `The triangle is where the county’s government sits${file.seat ? `, in ${file.seat.name}` : ""}. Each dot is a city hall.`),
+        el("dl", { class: "facts" }, fact("State", place.name), fact("County seat", file.seat?.name ?? ""), fact("Cities and towns", String(cities.length)), fact("Census code", file.code)),
+        cities.length ? el("h3", {}, count(cities.length, "city or town", "cities and towns")) : null,
+        el("ul", { class: "list" }, ...cities, ...(open ? [row("Unincorporated land", "Governed by the county itself", () => actions.city(open))] : [])),
+      );
+    },
+
+    /** One city on the county map that is open, or the land in no city. */
+    city(place: StateInfo, file: CountyFile, id: string) {
+      const county = countyName(file.code, file.name);
+      const at = file.ids.indexOf(id);
+      if (isUnincorporated(id)) {
+        return show(
+          back(county.name, () => actions.city(null)),
+          el("div", { class: "kicker" }, "No city"),
+          el("h2", {}, `Unincorporated ${county.name}`),
+          el("p", {}, `Land that belongs to no city. The county’s own board is its local government: it does here what a city council does inside a city.`),
+          chamberDoor(file.code),
+          el("dl", { class: "facts" }, fact("County", county.name), fact("State", place.name)),
+        );
+      }
+      const kind = file.kinds[at] || "city";
+      show(
+        back(county.name, () => actions.city(null)),
+        el("div", { class: "kicker" }, kind.replace(/^./, (first) => first.toUpperCase())),
+        el("h2", {}, file.names[at] ?? ""),
+        chamberDoor(id) ?? el("p", { class: "note" }, `Its council has no room here yet. When it does, the dot on its city hall will turn gold and lead in.`),
+        el("dl", { class: "facts" }, fact("County", county.name), fact("State", place.name), fact("County seat", id === file.seat?.place ? "Yes" : ""), fact("Census code", id)),
       );
     },
 
