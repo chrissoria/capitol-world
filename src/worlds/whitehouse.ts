@@ -7,7 +7,8 @@ import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { MAP_W, makeSite, streets, type Layout, type Rect, type Site } from "../world/layout";
 import type { WorldDef } from "./types";
 
-const FILE = "https://huggingface.co/datasets/chrissoria/executive-orders/resolve/main/world/whitehouse.json.gz";
+const FOLDER = "https://huggingface.co/datasets/chrissoria/executive-orders/resolve/main/world/";
+const FILE = `${FOLDER}whitehouse.json.gz`;
 const ROSTER = "https://huggingface.co/datasets/chrissoria/executive-branch-roster/resolve/main/world/roster.json";
 
 /** world/roster.json: who serves in the sitting administration (build_executive_roster.py). */
@@ -45,7 +46,11 @@ interface OrdersFile {
   revoked_by: string[][];
   excerpt: string[];
   url: string[];
+  /** Orders to each world/text/<n>.json.gz, which hold the text at greater length. Absent in an older file. */
+  text_per_file?: number;
 }
+
+const textFiles = new Map<number, Promise<string[]>>();
 
 let file: Promise<OrdersFile> | undefined;
 const load = () => (file ??= fetchJson<OrdersFile>(FILE));
@@ -59,6 +64,16 @@ const orderId = (data: OrdersFile, k: number) => `${data.president[k]}-eo-${data
 const plainName = (name: string) => name.replace(/\s*\(.*\)$/, "");
 
 const provider: DataProvider = {
+  async text(id) {
+    const data = await load();
+    const per = data.text_per_file;
+    const k = data.id.findIndex((_, index) => orderId(data, index) === id);
+    if (!per || k < 0) return null;
+    const n = Math.floor(k / per);
+    let texts = textFiles.get(n);
+    if (!texts) textFiles.set(n, (texts = fetchJson<string[]>(`${FOLDER}text/${n}.json.gz`)));
+    return (await texts)[k % per] ?? null;
+  },
   async world(period) {
     const data = await load();
     const last = data.presidents.length - 1;

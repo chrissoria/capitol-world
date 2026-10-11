@@ -72,10 +72,12 @@ export interface Building {
   staff: StaffSpot[];
   pages: number;
   cells: Uint8Array;
-  /** Where the bills on the floor are piled, in pixels. */
-  clerk: { x: number; y: number };
+  /** Where the bills on the floor are piled, in pixels; `labelDy` moves the count from above the pile. */
+  clerk: { x: number; y: number; labelDy?: number };
   /** A wall calendar that can be taken down and read, in pixels. Committee rooms only. */
   calendar?: { x: number; y: number };
+  /** People who keep to one room, by member id: the President does not wander the West Wing. */
+  confined?: Map<string, string>;
 }
 
 export interface Leaders {
@@ -103,6 +105,8 @@ const WALNUT = "#6f4526";
 const LEATHER = "#9a4f3c";
 const LEATHER_DARK = "#733726";
 const CAP = "#b3aa95";
+const WALL_FACE = 12; // pixels of a wall's front that show below its top
+const OVAL_CARPET = "#dfca8c"; // darker than a wall's face, so the curved wall reads as a wall
 const BOOKS = ["#b5453c", "#3a6fd8", "#3f8f4a", "#e0aa3e", "#8f5fb0", "#e58a45", "#f4ecd6", "#2f9e8f", "#56607a"];
 const FOOD = ["#e58a45", "#74c365", "#d8433b", "#ffd84a", "#f4ecd6", "#b98452"];
 
@@ -1136,43 +1140,117 @@ export function buildWhiteHouse(members: Member[]): Building {
   door(9, 13, 2);
   door(28, 13, 2);
   door(46, 13, 2);
-  door(8, 17, 2);
+  door(14, 17, 2); // clear of the serving counter, which runs along this wall inside
   door(47, 17, 2);
   door(28, H - 1, 2);
+
+  // The Oval Office is an oval: what is left of its rectangle is solid wall. The curve runs from the top
+  // of the north wall's face to the foot of the room, so the wall shows its face along the upper half.
+  const ovalShape = (() => {
+    const cx = (oval.ix + oval.iw / 2) * T;
+    const top = (oval.iy - 1) * T + (T - WALL_FACE);
+    const a = (oval.iw * T) / 2;
+    const b = ((oval.iy + oval.ih) * T - top) / 2;
+    const cy = top + b;
+    return {
+      cx,
+      /** Inside the curve, or inside it moved `down` pixels. */
+      inside: (x: number, y: number, down = 0) => ((x - cx) / a) ** 2 + ((y - down - cy) / b) ** 2 <= 1,
+      /** The curve's upper edge at x. */
+      edge: (x: number) => cy - b * Math.sqrt(Math.max(0, 1 - ((x - cx) / a) ** 2)),
+    };
+  })();
+  for (let ty = oval.iy; ty < oval.iy + oval.ih; ty++) {
+    for (let tx = oval.ix; tx < oval.ix + oval.iw; tx++) {
+      // A square is floor if someone standing on it has their feet on the carpet.
+      const x = tx * T + 8;
+      const open = ovalShape.inside(x, ty * T + 8, WALL_FACE) && ovalShape.inside(x - 5, ty * T + 13) && ovalShape.inside(x + 5, ty * T + 13);
+      if (!open) kit.set(tx, ty, WALL);
+    }
+  }
+  const confined = new Map<string, string>();
   kit.paint();
 
   const president = members.find((member) => member.group === "President") ?? members[0];
   const cabinet = members.filter((member) => member !== president && (member.group === "Cabinet" || member.group === "Cabinet-level"));
   const others = members.filter((member) => member !== president && !cabinet.includes(member));
 
-  // ── The Oval Office: the desk under the windows, two sofas across a rug with the seal. ──
+  // ── The Oval Office: the desk under three windows, two sofas across an oval rug with the seal. ──
   {
-    const { ix, iy, iw } = oval;
-    for (const tx of [ix + 4, ix + 7, ix + 10]) windowAt(tx, iy - 1);
-    flag(ix + 2, iy);
-    flag(ix + iw - 3, iy, PALETTE.gold);
-    rug(ix + 3, iy + 5, 10, 6, "#2f4a7a", PALETTE.gold);
-    const sealX = (ix + 8) * T;
-    const sealY = (iy + 8) * T;
-    box(g, sealX - 9, sealY - 7, 18, 14, PALETTE.gold);
-    box(g, sealX - 7, sealY - 5, 14, 10, "#2f4a7a");
-    box(g, sealX - 3, sealY - 2, 6, 4, PALETTE.gold);
+    const { ix, iy, iw, ih } = oval;
+    const { cx, inside, edge } = ovalShape;
+    // The room again, a pixel at a time: the tiles above only know which squares can be walked on.
+    const doorway = (px: number) => cells[(iy + ih) * W + Math.floor(px / T)] === FLOOR;
+    for (let py = (iy - 1) * T + 1; py < (iy + ih) * T; py++) {
+      for (let px = ix * T; px < (ix + iw) * T; px++) {
+        const x = px + 0.5;
+        const y = py + 0.5;
+        const threshold = py >= (iy + ih) * T - 2 && doorway(px);
+        let color: string;
+        if (threshold) color = OVAL_CARPET;
+        else if (!inside(x, y)) color = CAP;
+        else if (!inside(x - 1, y) || !inside(x + 1, y) || !inside(x, y - 1) || (!inside(x, y + 1) && !doorway(px))) color = PALETTE.ink;
+        else if (!inside(x, y, WALL_FACE)) color = inside(x, y, WALL_FACE - 3) ? PALETTE.wallShade : PALETTE.wall;
+        else color = (Math.floor(px / T) + Math.floor(py / T)) % 2 && px % T >= 7 && px % T < 9 && py % T >= 7 && py % T < 9 ? "#cdb877" : OVAL_CARPET;
+        box(g, px, py, 1, 1, color);
+      }
+    }
+    // Three windows, following the curve of the wall.
+    for (const offset of [-48, 0, 48]) {
+      for (let i = 0; i < 12; i++) {
+        const px = cx + offset - 6 + i;
+        const py = Math.round(edge(px + 0.5)) + 2;
+        const frame = i === 0 || i === 11;
+        box(g, px, py, 1, 9, PALETTE.ink);
+        if (!frame) box(g, px, py + 1, 1, 7, i === 5 || i === 6 ? PALETTE.ink : PALETTE.window);
+        if (i >= 1 && i <= 3) box(g, px, py + 1, 1, 2, PALETTE.white);
+      }
+    }
+    // The rug, an oval inside the oval, and the seal at its middle.
+    const rugY = (iy + 8) * T + 4;
+    const disc = (rx: number, ry: number, color: string) => {
+      for (let py = Math.floor(rugY - ry); py <= rugY + ry; py++) {
+        const half = rx * Math.sqrt(Math.max(0, 1 - ((py + 0.5 - rugY) / ry) ** 2));
+        if (half >= 0.5) box(g, Math.round(cx - half), py, Math.round(half * 2), 1, color);
+      }
+    };
+    disc(88, 46, PALETTE.ink);
+    disc(87, 45, "#2f4a7a");
+    disc(82, 40, PALETTE.gold);
+    disc(81, 39, "#2f4a7a");
+    disc(11, 9, PALETTE.gold);
+    disc(9, 7, "#2f4a7a");
+    disc(4, 3, PALETTE.gold);
+
+    flag(ix + 4, iy + 1);
+    flag(ix + 11, iy + 1, PALETTE.gold);
     table(ix + 6, iy + 2, 4, WALNUT, "#4f2f18");
-    papers((ix + 6) * T + 4, (iy + 2) * T - 3);
-    chairDown(ix + 8, iy + 1, LEATHER_DARK);
-    if (president) seats.set(president.id, spot("seat", ix + 8, iy + 1, "down", "oval", { owner: president.id }));
+    // The President's chair, on the room's centre line: half a tile left of the square it belongs to.
+    framed(g, cx - 5, (iy + 1) * T - 8, 10, 18, LEATHER_DARK);
+    kit.set(ix + 8, iy + 1, CHAIR);
+    if (president) {
+      seats.set(president.id, spot("seat", ix + 8, iy + 1, "down", "oval", { owner: president.id, dx: -8 }));
+      confined.set(president.id, "oval");
+    }
     for (const tx of [ix + 6, ix + 9]) {
       chairUp(tx, iy + 4);
-      spot("chat", tx, iy + 4, "up", "oval");
+      spot("hearing", tx, iy + 4, "up", "oval");
     }
-    for (const tx of [ix + 2, ix + 11]) {
+    for (const tx of [ix + 3, ix + 10]) {
       sofa(tx, iy + 7, 3);
       for (let i = 0; i < 3; i++) spot("sofa", tx + i, iy + 7, "down", "oval");
     }
-    bust(ix, iy + 3);
-    plant(ix + iw - 1, iy + 3);
-    plant(ix, iy + 11);
-    picture(ix + 13, iy - 1, 1);
+    // Places to stand: at the windows, by the busts, on the seal, at the door.
+    spot("chat", ix + 6, iy, "up", "oval");
+    spot("chat", ix + 9, iy, "up", "oval");
+    spot("chat", ix + 2, iy + 5, "down", "oval");
+    spot("chat", ix + 13, iy + 5, "down", "oval");
+    spot("chat", ix + 7, iy + 9, "down", "oval");
+    spot("chat", ix + 8, iy + 10, "up", "oval");
+    bust(ix + 1, iy + 4);
+    bust(ix + 14, iy + 4);
+    plant(ix + 3, iy + 10);
+    plant(ix + 12, iy + 10);
   }
 
   // ── The Cabinet Room: one long table, the secretaries along both sides. ──
@@ -1292,7 +1370,9 @@ export function buildWhiteHouse(members: Member[]): Building {
     staff,
     pages: 0,
     cells,
-    clerk: { x: (oval.ix + 7) * T + 6, y: (oval.iy + 2) * T - 2 },
+    // The count goes in front of the desk: above it is the President's head.
+    clerk: { x: ovalShape.cx, y: (oval.iy + 2) * T - 2, labelDy: 28 },
+    confined,
   };
 }
 

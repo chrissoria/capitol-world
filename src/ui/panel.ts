@@ -1,6 +1,6 @@
 // The side panel: everything on the map is also reachable here with a keyboard.
 
-import { loadCongressLine, loadSearch, loadSearchOf } from "../data/load";
+import { loadCongressLine, loadSearch, loadSearchOf, loadText } from "../data/load";
 import { comingMeetings, liveMeeting, meetingTime, meetingUrl, pastMeetings, type CommitteeInfo, type CommitteeMeeting } from "../data/meetings";
 import type { Bill, Member, SearchIndex, World } from "../data/types";
 import { billLabel, ordinal } from "../data/types";
@@ -350,10 +350,23 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     const site = actions.siteOf(bill.id);
     const sponsorButton = sponsor ? el("button", { type: "button" }, pin(sponsor.party), memberLine(sponsor)) : null;
     sponsorButton?.addEventListener("click", () => actions.select({ type: "member", id: bill.sponsor }));
+    // The map file carries the start of a long text; the rest arrives a moment after the card opens.
+    const excerpt = world.summary_source === "excerpt";
+    const summary = bill.summary ? el("p", { class: "long-text tall", tabindex: "0" }, bill.summary) : null;
+    const summaryNote = el("p", { class: "note" }, excerpt ? "The opening of the order’s text." : world.summary_source === "crs" ? "Official summary by the Congressional Research Service, shortened." : "Written by an AI model from the bill text. It may describe an earlier version of the bill.");
+    if (summary && bill.summary.endsWith("…")) {
+      void loadText(bill.id).then((text) => {
+        if (!text || !summary.isConnected) return;
+        summary.textContent = text;
+        const cut = text.endsWith("…");
+        if (excerpt) summaryNote.textContent = cut ? "The order’s text from its first section; it runs on past what is shown here." : "The order’s text, after the opening formula.";
+        else if (world.summary_source === "crs") summaryNote.textContent = cut ? "Official summary by the Congressional Research Service; it runs on past what is shown here." : "Official summary by the Congressional Research Service.";
+      });
+    }
     put(sections.inspect, 
       backButton(),
       el("div", { class: "kicker" }, billLabel(bill)),
-      el("h2", {}, bill.title),
+      el("h2", { class: bill.title.length > 220 ? "long-text title" : "", ...(bill.title.length > 220 ? { tabindex: "0" } : {}) }, bill.title),
       el("p", {}, el("span", { class: "chip stage" }, STAGES[bill.loc.kind] ?? bill.loc.kind), site ? el("span", { class: "chip" }, site.label) : null, bill.policy_area ? el("span", { class: "chip" }, bill.policy_area) : null),
       site && capitol ? explainSite(site) : null,
       el("h3", {}, capitol ? "Latest action" : "Signed"),
@@ -372,9 +385,9 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
           return el("li", {}, button);
         })),
       ]),
-      bill.summary ? el("h3", {}, world.summary_source === "excerpt" ? "How it begins" : "Summary") : null,
-      bill.summary ? el("p", {}, bill.summary) : null,
-      bill.summary ? el("p", { class: "note" }, world.summary_source === "excerpt" ? "The opening of the order’s text." : world.summary_source === "crs" ? "Official summary by the Congressional Research Service, shortened." : "Written by an AI model from the bill text. It may describe an earlier version of the bill.") : null,
+      summary ? el("h3", {}, excerpt ? "What it says" : "Summary") : null,
+      summary,
+      summary ? summaryNote : null,
       el("p", {}, el("a", { href: bill.url || congressUrl(bill.id), target: "_blank", rel: "noopener" }, capitol ? "Read it on Congress.gov ↗" : "Read the whole order ↗")),
     );
   }

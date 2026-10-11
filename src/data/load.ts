@@ -26,6 +26,8 @@ export interface DataProvider {
   world(period: number | null): Promise<World>;
   search(period: number | null): Promise<SearchIndex>;
   line(): Promise<CongressEntry[]>;
+  /** The fuller text of an item whose summary on the map was cut short; null when there is none. */
+  text?(id: string): Promise<string | null>;
 }
 
 let provider: DataProvider | null = null;
@@ -91,6 +93,23 @@ export async function loadWorld(): Promise<{ world: World; source: DataSource }>
 /** The finished Congresses that can be opened, newest first. Empty if the list cannot be read. */
 export function loadCongresses(): Promise<CongressList["archive"]> {
   return fetchJson<CongressList>(`${ROOT}congresses.json`).then((list) => list.archive ?? [], () => []);
+}
+
+const TEXT_FILES = 16; // build_world_snapshot.py: a finished Congress's long summaries, by bill number modulo this
+const textFiles = new Map<string, Promise<Record<string, string>>>();
+
+/**
+ * The whole of a summary that the map file cut short ("…"), fetched when the item is opened.
+ * Null when there is nothing longer to show.
+ */
+export function loadText(id: string): Promise<string | null> {
+  if (provider) return provider.text ? provider.text(id).catch(() => null) : Promise.resolve(null);
+  const [congress, , number] = id.split("-");
+  if (!archived || Number(congress) !== archived || !/^\d+$/.test(number ?? "")) return Promise.resolve(null);
+  const url = `${ROOT}archive/${congress}/text/${Number(number) % TEXT_FILES}.json.gz`;
+  let file = textFiles.get(url);
+  if (!file) textFiles.set(url, (file = fetchJson<Record<string, string>>(url)));
+  return file.then((texts) => texts[id] ?? null, () => (textFiles.delete(url), null));
 }
 
 let committeeFile: Promise<CommitteeFile> | undefined;

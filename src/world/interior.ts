@@ -195,6 +195,12 @@ export class InteriorScene extends Phaser.Scene {
       if (!this.byKind.has(spot.kind)) this.byKind.set(spot.kind, []);
       this.byKind.get(spot.kind)!.push(spot);
     }
+    if (import.meta.env.DEV && b.spots.length) {
+      // A door behind a counter once sealed off a whole room; say so while building, not after.
+      const from = b.spots[0];
+      const lost = b.spots.filter((spot) => spot !== from && !findPath(b, from.tx, from.ty, spot.tx, spot.ty));
+      if (lost.length) console.warn(`${b.key}: ${lost.length} of ${b.spots.length} places cannot be walked to`, lost.map((spot) => `${spot.kind} ${spot.tx},${spot.ty}`));
+    }
     const republicans = members.filter((member) => member.party === "R").length;
     this.majority = republicans * 2 >= members.length ? "R" : "D";
 
@@ -288,7 +294,7 @@ export class InteriorScene extends Phaser.Scene {
     for (let i = 0; i < Math.min(count, 7); i++) {
       this.add.image(x - 30 + i * 10, y - (i % 2) * 2, `paper-${this.wing}`).setDepth(depth);
     }
-    const label = this.text(x, y - 9, count ? `${count} ${caption}` : "", 7, PALETTE.yellow).setOrigin(0.5, 1);
+    const label = this.text(x, y + (this.b.clerk.labelDy ?? -9), count ? `${count} ${caption}` : "", 7, PALETTE.yellow).setOrigin(0.5, 1);
     label.setDepth(DEPTH.emote);
     const zone = this.add
       .zone(x - 40, y - 12, 80, 22)
@@ -452,10 +458,12 @@ export class InteriorScene extends Phaser.Scene {
 
   private free(kind: SpotKind, agent: Agent): Spot | null {
     const party = agent.member?.party === "R" ? "R" : "D";
+    const keptTo = agent.member ? this.b.confined?.get(agent.member.id) : undefined;
     let own: Spot | null = null;
     const open: Spot[] = [];
     for (const spot of this.byKind.get(kind) ?? []) {
       if (spot.taken || spot === agent.at) continue;
+      if (keptTo && spot.room !== keptTo) continue;
       if (spot.party && spot.party !== party) continue;
       if (spot.owner) {
         if (spot.owner === agent.id) own = spot;
@@ -516,9 +524,16 @@ export class InteriorScene extends Phaser.Scene {
       agent.prop?.destroy();
       agent.emote = agent.prop = null;
     }
+    const tiles = findPath(this.b, agent.at.tx, agent.at.ty, step.spot.tx, step.spot.ty);
+    if (!tiles) {
+      // No way there: stay put rather than walk through a wall.
+      for (const planned of [step, ...agent.steps]) if (planned.spot !== agent.home) planned.spot.taken = null;
+      agent.steps = [];
+      agent.until = this.clock + seconds(8, 20);
+      return;
+    }
     agent.bob = false;
     if (agent.at !== agent.home || !agent.member) agent.at.taken = null;
-    const tiles = findPath(this.b, agent.at.tx, agent.at.ty, step.spot.tx, step.spot.ty) ?? [];
     agent.path = tiles.map((tile) => spotXY(tile));
     const end = spotXY(step.spot);
     if (agent.path.length) agent.path[agent.path.length - 1] = end;

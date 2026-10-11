@@ -928,6 +928,16 @@ button.quiet:active {
   overscroll-behavior: contain;
 }
 
+/* A summary or an order's text: more room, and its paragraphs kept. */
+.long-text.tall {
+  max-height: 16em;
+  white-space: pre-line;
+}
+
+.long-text.title {
+  max-height: 6.2em;
+}
+
 .pair {
   display: flex;
   gap: 6px;

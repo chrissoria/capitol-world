@@ -535,8 +535,9 @@ export class WorldScene extends Phaser.Scene {
     }
     const label = `the ${site?.label ?? "committee room"}`;
     this.hooks.onPlace({ place, label, note: "opening the room…" });
+    let unbuilt = false; // a finished Congress whose committee records are not published yet
     void loadCommittees()
-      .then((file) => file.committees[place], () => undefined)
+      .then((file) => file.committees[place], () => ((unbuilt = !!this.world.final), undefined))
       .then((info) => {
         if (this.view !== view) return; // the visitor has moved on
         const meeting = info && (meetingId ? info.meetings.find((entry) => entry.id === meetingId) : liveMeeting(info));
@@ -551,7 +552,7 @@ export class WorldScene extends Phaser.Scene {
           },
         });
         const note = !meeting
-          ? this.world.final ? "this Congress has ended" : "not meeting right now"
+          ? unbuilt ? "this Congress’s committee records are not published yet" : this.world.final ? "this Congress has ended" : "not meeting right now"
           : meetingId
             ? `re-staging the ${meeting.type.toLowerCase()} of ${meetingTime(meeting).split(",").slice(0, 2).join(",")}`
             : "in session now";
