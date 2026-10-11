@@ -1,6 +1,7 @@
 // The part of a member's card that comes from world/members.json: the official website, the time in
 // office, and the birth date. Everything here is read from that file; nothing is worked out from a name.
 
+import { channelsOf } from "../data/contact";
 import type { Member, MemberFacts, MemberTerm } from "../data/types";
 import { el, niceDate } from "./dom";
 
@@ -69,7 +70,9 @@ export function memberFacts(member: Member, facts: MemberFacts, congress: number
 
   const website = safe(facts.url);
   const form = safe(facts.contact_form);
-  const reach = [facts.office, facts.phone].filter(Boolean).join(" · ");
+  // The office line: where it is, and its number as a link a phone can dial.
+  const tel = channelsOf(facts).tel;
+  const reach: (Node | string)[] = [facts.office, facts.office && facts.phone ? " · " : "", facts.phone ? (tel ? el("a", { href: tel }, facts.phone) : facts.phone) : ""].filter((part) => part !== "" && part != null) as (Node | string)[];
   return el(
     "div",
     { class: "member-facts" },
@@ -86,7 +89,7 @@ export function memberFacts(member: Member, facts: MemberFacts, congress: number
         .map((run) => row(run.start < shown!.start ? "Earlier" : "Later", describe(run) + elsewhere(run))),
       facts.born ? row("Born", niceDate(facts.born) + (serving ? ` · age ${span(facts.born, today).replace(/ years?$/, "")}` : "")) : null,
       // On the map of an earlier Congress, a member who has since changed chamber has today's office, not that seat's.
-      reach ? row(shown && shown.end <= today ? "Office now" : "Office", reach) : null,
+      reach.length ? row(shown && shown.end <= today ? "Office now" : "Office", ...reach) : null,
     ),
   );
 }

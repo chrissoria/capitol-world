@@ -10,6 +10,7 @@ import type { Filter, Target } from "../world/scene";
 import type { WorldDef } from "../worlds/types";
 import { add, el, niceDate, put } from "./dom";
 import { describeFinished, explainSite, explainStage } from "./explain";
+import { contactBox } from "./contact";
 import { memberFacts } from "./member";
 import { createRoster } from "./roster";
 import { createStats } from "./stats";
@@ -397,9 +398,13 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     const theirs = world.bills.filter((bill) => bill.sponsor === member.id).sort((a, b) => b.last_action.date.localeCompare(a.last_action.date));
     // The website, time in office and birth date are in a file of their own, which arrives a moment after the card opens.
     const more = capitol ? el("div", {}) : null;
-    if (more) {
+    const write = capitol ? el("div", {}) : null; // the box for writing to them, where their office can be reached
+    if (more && write) {
       void loadMemberFacts(member.id).then((facts) => {
-        if (facts && more.isConnected) put(more, memberFacts(member, facts, world.congress));
+        if (!facts || !more.isConnected) return;
+        put(more, memberFacts(member, facts, world.congress));
+        const box = contactBox(member, facts);
+        if (box) put(write, box);
       });
     }
     put(sections.inspect, 
@@ -417,6 +422,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
         : final
           ? `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} in the ${congressName}.`
           : `Sponsor of ${member.n_total.toLocaleString()} bill${member.n_total === 1 ? "" : "s"} this Congress, ${theirs.length} with an action in the last 30 days.`),
+      write,
       theirs.length ? el("h3", {}, !capitol ? Items : final ? "Their bills" : "Active bills") : null,
       el("ul", { class: "list" }, ...theirs.slice(0, 200).map((bill) => billRow(bill))),
       theirs.length > 200 ? el("p", { class: "note" }, `Showing the 200 most recent of ${theirs.length}.`) : null,
