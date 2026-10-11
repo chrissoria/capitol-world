@@ -4,7 +4,7 @@
 import Phaser from "phaser";
 import type { Member, World } from "../data/types";
 import { PALETTE, SPRITE_H, box, canvas, drawFigures, framed, type Look } from "./art";
-import { T, buildBuilding, buildCommitteeRoom, buildWhiteHouse, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
+import { T, buildBuilding, buildCommitteeRoom, buildSupremeCourt, buildWhiteHouse, findPath, spotXY, type Building, type CommitteeRoomSpec, type Spot, type SpotKind, type Wing } from "./building";
 import { panZoom, type PanZoom } from "./camera";
 
 export interface InteriorHooks {
@@ -173,6 +173,14 @@ export class InteriorScene extends Phaser.Scene {
       if (!plan) {
         plan = buildWhiteHouse(members);
         this.plans.set("whitehouse", plan);
+      }
+    } else if (this.place === "court") {
+      // Every justice of the term on show has a chair on the bench, and that is where each starts from.
+      members = this.world.members;
+      plan = this.plans.get("court");
+      if (!plan) {
+        plan = buildSupremeCourt(members);
+        this.plans.set("court", plan);
       }
     } else {
       members = this.world.members.filter((member) => member.chamber === wing);
