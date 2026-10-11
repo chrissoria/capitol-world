@@ -123,6 +123,8 @@ export class InteriorScene extends Phaser.Scene {
   wing: Wing = "House";
   private place = "House";
   private sitting = false;
+  /** How much longer than usual people keep their seats: a chamber of hundreds is restless at the pace that suits a few dozen. */
+  private calm = 1;
   private committee: CommitteeRoomSpec | undefined;
   private speaker: Agent | null = null;
   private nextSpeakerAt = 0;
@@ -213,6 +215,7 @@ export class InteriorScene extends Phaser.Scene {
       const lost = b.spots.filter((spot) => spot !== from && !findPath(b, from.tx, from.ty, spot.tx, spot.ty));
       if (lost.length) console.warn(`${b.key}: ${lost.length} of ${b.spots.length} places cannot be walked to`, lost.map((spot) => `${spot.kind} ${spot.tx},${spot.ty}`));
     }
+    this.calm = this.place === "House" || this.place === "Senate" ? 6 : 1; // about 30 walking in the House at a time, where it was 100
     const republicans = members.filter((member) => member.party === "R").length;
     this.majority = republicans * 2 >= members.length ? "R" : "D";
 
@@ -369,14 +372,14 @@ export class InteriorScene extends Phaser.Scene {
         continue;
       }
       // Start with the building already busy rather than everyone in their seat.
-      if (Math.random() < 0.45 && this.planOuting(agent)) {
+      if (Math.random() < 0.45 / this.calm && this.planOuting(agent)) {
         const last = agent.steps.pop()!;
         for (const step of agent.steps) step.spot.taken = null;
         agent.steps = [];
         agent.at = last.spot;
         agent.stay = last.stay * (0.3 + 0.7 * Math.random());
         this.arrive(agent);
-      } else agent.until = seconds(2, 90);
+      } else agent.until = seconds(2, 90) * this.calm;
     }
   }
 
@@ -544,7 +547,7 @@ export class InteriorScene extends Phaser.Scene {
           errand.taken = agent.id;
           agent.steps.push({ spot: errand, stay: seconds(3, 9) });
         }
-      } else if (agent.at !== agent.home) agent.steps.push({ spot: agent.home, stay: seconds(25, 100) });
+      } else if (agent.at !== agent.home) agent.steps.push({ spot: agent.home, stay: seconds(25, 100) * this.calm });
       else this.planOuting(agent);
     }
     const step = agent.steps.shift();
