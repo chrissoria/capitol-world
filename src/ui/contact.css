@@ -1,0 +1,141 @@
+/* ── Writing to a member (src/ui/contact.ts) ──
+   Every rule starts from .contact, so the order this file loads in against style.css does not matter. */
+
+.contact {
+  padding-bottom: 2px;
+}
+
+.contact > :not(summary) {
+  margin-left: 10px;
+  margin-right: 10px;
+}
+
+.contact label {
+  margin-top: 10px;
+}
+
+.contact input[type="text"],
+.contact textarea {
+  display: block;
+  width: calc(100% - 20px);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--ink);
+  padding: 7px 8px;
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.contact textarea {
+  min-height: 7em;
+  resize: vertical;
+}
+
+.contact textarea:focus-visible {
+  outline: 3px solid var(--yellow);
+  outline-offset: 1px;
+}
+
+.contact-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 8px;
+}
+
+/* The two ways out. One is a link (a mailto) and one a button; they are drawn alike. */
+.contact .go {
+  flex: 1 1 100%;
+  font: inherit;
+  font-weight: bold;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: none;
+  color: var(--ink);
+  background: var(--yellow);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+  padding: 7px 10px;
+  box-shadow: 2px 2px 0 var(--ink);
+  cursor: pointer;
+}
+
+.contact .go:hover {
+  background: #ffe57a;
+}
+
+.contact .go:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+
+.contact .go + .go {
+  background: var(--paper);
+}
+
+.contact .go + .go:hover {
+  background: #fff;
+}
+
+.contact-small {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.contact button.quiet {
+  display: inline;
+  margin: 0;
+  /* Room for a thumb: these are small on a phone otherwise. */
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.contact button.quiet.inline {
+  padding: 0;
+  font-size: inherit;
+}
+
+.contact .contact-status {
+  min-height: 1.45em;
+  color: var(--ink);
+}
+
+.contact-channels {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 10px;
+  margin-top: 8px;
+  margin-bottom: 10px;
+  padding-top: 8px;
+  border-top: 2px solid var(--paper-edge);
+  font-size: 13px;
+}
+
+.contact-channels dt {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--muted);
+}
+
+.contact-channels dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  /* Below 16px, a phone zooms the page when a box is tapped. */
+  .contact input[type="text"],
+  .contact textarea {
+    font-size: 16px;
+  }
+
+  .contact button.quiet {
+    padding: 8px 0;
+  }
+}
