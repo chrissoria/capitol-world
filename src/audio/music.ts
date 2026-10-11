@@ -1,11 +1,11 @@
 // Chiptune background music, synthesised in the browser: no audio files.
-// The map's tune was written for this project. The others are in the public
-// domain ("Yankee Doodle" and "Shenandoah", traditional; "America the Beautiful",
-// Samuel A. Ward, 1882) in arrangements written for this project, so there is
-// nothing to license.
+// The map's tune and the one for California's county boards were written for
+// this project. The others are in the public domain ("Yankee Doodle" and
+// "Shenandoah", traditional; "America the Beautiful", Samuel A. Ward, 1882) in
+// arrangements written for this project, so there is nothing to license.
 
-/** The map, a committee room, a chamber, and the whiteboard in the Library of Congress. */
-export type TrackName = "map" | "committee" | "inside" | "library";
+/** The map, a committee room, a chamber, the whiteboard in the Library of Congress, and the board rooms of California's counties. */
+export type TrackName = "map" | "committee" | "inside" | "library" | "county-ca";
 
 type Wave = "pulse" | "square" | "triangle";
 
@@ -42,6 +42,7 @@ const CHORDS: Record<string, [string, string, string]> = {
   Dm: ["D", "F", "A"],
   A: ["A", "C#", "E"],
   D: ["D", "F#", "A"],
+  Am: ["A", "C", "E"],
 };
 
 function midi(name: string): number {
@@ -246,7 +247,46 @@ function buildInside(): Song {
   };
 }
 
-const SONGS: Record<TrackName, () => Song> = { map: buildMap, committee: buildCommittee, inside: buildInside, library: buildLibrary };
+/**
+ * For the board rooms of California's counties: written for this project, and newer in manner than the marches and hymns
+ * elsewhere. Four chords that go round (A minor, F, C, G), a bass that pushes ahead of the beat, the chord picked out a note
+ * at a time above it, and a backbeat. Eight bars, and it loops.
+ */
+function buildCountyCalifornia(): Song {
+  const tune = `
+    -/4 E5/2 G5/2 A5/4 G5/2 E5/2        C5/6 D5/2 C5/4 A4/4
+    -/4 E5/2 G5/2 C6/4 B5/2 G5/2        D5/6 E5/2 D5/8
+    -/2 A5/2 G5/2 E5/2 A5/2 G5/2 E5/4   F5/4 E5/2 C5/2 A4/8
+    -/2 G4/2 C5/2 E5/2 G5/4 E5/4        D5/4 B4/4 G4/8`;
+  const chords = "Am F C G Am F C G".split(" ");
+  const bass: string[] = [];
+  const harmony: string[] = [];
+  const drums: string[] = [];
+  for (const name of chords) {
+    const [root, third, fifth] = CHORDS[name];
+    // The root three times, the second and third of them early; then the fifth, on the way to the next chord.
+    bass.push(`${low(root)}/3 ${low(root)}/3 ${low(root)}/2 -/2 ${low(root)}/2 ${low(fifth)}/4`);
+    const up = [above(root, root, 3), above(third, root, 3), above(fifth, root, 3), above(third, root, 3)];
+    harmony.push([...up, ...up].map((note) => `${note}/2`).join(" "));
+    drums.push("k+h/2 h/2 s+h/2 h/2 h/2 k/2 s+h/2 h/2");
+  }
+  const lead = parse(tune);
+  return {
+    bpm: 92,
+    length: lead.length,
+    voices: {
+      lead: { wave: "square", gain: 0.24, gate: 0.86 },
+      harmony: { wave: "pulse", gain: 0.1, gate: 0.5 },
+      bass: { wave: "triangle", gain: 0.34, gate: 0.8 },
+    },
+    lead: lead.notes,
+    harmony: parse(harmony.join(" ")).notes,
+    bass: parse(bass.join(" ")).notes,
+    drums: parse(drums.join(" ")).notes,
+  };
+}
+
+const SONGS: Record<TrackName, () => Song> = { map: buildMap, committee: buildCommittee, inside: buildInside, library: buildLibrary, "county-ca": buildCountyCalifornia };
 const VOLUME = 0.22;
 const LOOKAHEAD = 0.25; // seconds of notes kept queued
 const STORAGE_KEY = "capitol-world-music";

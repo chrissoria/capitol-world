@@ -78,6 +78,9 @@ addEventListener("popstate", () => {
   if (atlasInAddress() !== atlas || worldInAddress().key !== def.key || congressInAddress() !== archived || (def.key === "chamber" && placeInAddress() !== shownPlace)) switchTo(congressInAddress(), "keep", atlasInAddress() ? "usa" : worldInAddress().key);
 });
 
+/** The tune of a world that is one room: a county board in California has one of its own; any other board or council has the committee rooms'. */
+const roomTrack = () => (/^06\d{3}$/.test(shownPlace ?? "") ? "county-ca" : "committee");
+
 /** The music button, on a page that has just been built. */
 function wireMusic() {
   const musicButton = $<HTMLButtonElement>("music");
@@ -181,7 +184,7 @@ async function main() {
     onPlace(inside) {
       calendar.close();
       // The chambers have their own tune, and so do the committee rooms.
-      music.setTrack(!inside ? "map" : def.room ? "committee" : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
+      music.setTrack(!inside ? "map" : def.room ? roomTrack() : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
       backButton.hidden = !inside;
       if (def.room) backButton.textContent = "← Map"; // a world that is one room has no map of its own: the way out is to the country's
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
@@ -201,7 +204,7 @@ async function main() {
         stage: (code, meetingId) => scene.stage(code, meetingId),
         whereIs: (id) => scene.whereIs(id),
         lookAt: (key) => scene.lookAt(key),
-        learning: (open) => music.setTrack(open ? "library" : "map"),
+        learning: (open) => music.setTrack(open ? "library" : def.room ? roomTrack() : "map"),
         travel: (to) => switchTo(null, "push", to as Destination, def.room && to === "usa" ? chamberWayOut() : ""),
         mapView: () => (scene.textures.exists("ground") ? (scene.textures.get("ground").getSourceImage() as HTMLCanvasElement) : null),
       }, def);
