@@ -1230,3 +1230,10 @@ label.check input {
     display: none;
   }
 }
+
+/* A door to another world. */
+button.door {
+  width: 100%;
+  background: var(--gold, #e0aa3e);
+  text-align: center;
+}

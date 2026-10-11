@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { loadCommittees } from "../data/load";
 import { liveMeeting, meetingTime } from "../data/meetings";
-import type { Bill, Member, MoveEvent, World } from "../data/types";
+import type { Bill, Chamber, Member, MoveEvent, World } from "../data/types";
 import { locKey } from "../data/types";
 import {
   PALETTE,
@@ -34,6 +34,8 @@ export interface SceneHooks {
   onPlace(inside: PlaceInfo | null): void;
   /** The wall calendar in a committee's room was clicked. */
   onCalendar(code: string): void;
+  /** A gate to another world was clicked. */
+  onTravel(world: string): void;
   onReady(): void;
 }
 
@@ -54,6 +56,7 @@ export interface Filter {
 }
 
 const FONT = '"Trebuchet MS", "Verdana", sans-serif';
+const paperOf = (bill: Bill) => (bill.type === "EO" ? "paper-Order" : bill.type.startsWith("S") ? "paper-Senate" : "paper-House");
 const DEPTH = { ground: 0, belt: 1, zone: 2, dock: 5, member: 10, mover: 40, ring: 9, label: 50 };
 const ROBOT_SPEED = 430; // pixels per second
 const WALK_SPEED = 300;
@@ -121,6 +124,7 @@ export class WorldScene extends Phaser.Scene {
   constructor(
     private world: World,
     private hooks: SceneHooks,
+    private makeLayout: (world: World) => Layout = (world) => buildLayout(world.committees),
   ) {
     super("world");
   }
@@ -128,13 +132,14 @@ export class WorldScene extends Phaser.Scene {
   // ── Setup ──────────────────────────────────────────────────────────────────
 
   create() {
-    this.layout = buildLayout(this.world.committees);
+    this.layout = this.makeLayout(this.world);
+    const grave = this.layout.graveyard ?? { fates: ["v", "f"], site: "memorial" };
     for (const member of this.world.members) this.members.set(member.id, member);
     for (const bill of this.world.bills) {
       this.bills.set(bill.id, bill);
       // A bill stopped by an event (a veto, a lost vote) is laid at the memorial; the rest stay where they stood.
-      const stopped = bill.fate === "v" || bill.fate === "f";
-      const key = stopped ? "memorial" : siteKeyFor(locKey(bill.loc), this.layout.sites, bill.loc.chamber)!;
+      const stopped = Boolean(bill.fate && grave.fates.includes(bill.fate));
+      const key = stopped ? grave.site : this.siteKeyOf(locKey(bill.loc), bill.loc.chamber)!;
       this.finalSite.set(bill.id, key);
       this.currentSite.set(bill.id, key);
     }
@@ -190,6 +195,7 @@ export class WorldScene extends Phaser.Scene {
     for (const [id, frame] of sheet.frames) texture.add(id, 0, frame.x, frame.y, frame.w, frame.h);
     this.textures.addCanvas("paper-House", drawPaper(PALETTE.house));
     this.textures.addCanvas("paper-Senate", drawPaper(PALETTE.senate));
+    this.textures.addCanvas("paper-Order", drawPaper(PALETTE.gold));
     this.textures.addCanvas("crate", drawCrate());
     this.textures.addCanvas("robot", drawRobot());
     this.textures.addCanvas("belt", drawBelt());
@@ -204,6 +210,7 @@ export class WorldScene extends Phaser.Scene {
 
   private makeBelts() {
     for (const belt of Object.values(this.layout.conveyors)) {
+      if (!belt) continue;
       const x1 = Math.min(belt.from.x, belt.to.x) * TILE;
       const width = Math.abs(belt.to.x - belt.from.x) * TILE;
       const sprite = this.add
@@ -253,6 +260,7 @@ export class WorldScene extends Phaser.Scene {
     }
     for (const chamber of ["House", "Senate"] as const) {
       const rect = this.layout.chambers[chamber];
+      if (!rect) continue;
       const total = this.world.members.filter((m) => m.chamber === chamber).length;
       this.hints.push(
         this.text((rect.x + rect.w / 2) * TILE, (rect.y - 0.6) * TILE, `${chamber.toUpperCase()} · ${total} members`, 12).setOrigin(0.5, 1),
@@ -400,7 +408,7 @@ export class WorldScene extends Phaser.Scene {
     const startX = site.dock.x * TILE + 8;
     shown.forEach((bill, index) => {
       const paper = this.add
-        .image(startX + index * 12, y, `paper-${bill.type.startsWith("S") ? "Senate" : "House"}`)
+        .image(startX + index * 12, y, paperOf(bill))
         .setDepth(DEPTH.dock)
         .setInteractive(new Phaser.Geom.Rectangle(-2, -3, 13, 17), Phaser.Geom.Rectangle.Contains);
       paper.input!.cursor = "pointer";
@@ -461,6 +469,7 @@ export class WorldScene extends Phaser.Scene {
       else if (fly && (chamber === "House" || chamber === "Senate")) this.enter(chamber);
     } else if (target?.type === "site" && target.id.startsWith("floor:")) this.enter(target.id.endsWith("Senate") ? "Senate" : "House");
     else if (target?.type === "site" && target.id.startsWith("committee:")) this.enter(target.id.slice("committee:".length));
+    else if (target?.type === "site" && this.layout.sites.get(target.id)?.travel) return this.hooks.onTravel(this.layout.sites.get(target.id)!.travel!);
     else if (target) this.leave();
     this.drawSelection();
     this.interior.setSelected(target?.type === "member" ? target.id : null);
@@ -677,8 +686,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private siteFor(loc: string | null, billId: string): Site | null {
-    const key = siteKeyFor(loc, this.layout.sites, this.bills.get(billId)!.loc.chamber);
-    return key ? this.layout.sites.get(key)! : null;
+    const key = this.siteKeyOf(loc, this.bills.get(billId)!.loc.chamber);
+    return key ? (this.layout.sites.get(key) ?? null) : null;
+  }
+
+  /** The site a location key belongs to, by this world's rules. */
+  private siteKeyOf(loc: string | null, chamber: Chamber): string | null {
+    return this.layout.siteOf ? this.layout.siteOf(loc) : siteKeyFor(loc, this.layout.sites, chamber);
   }
 
   /** Events grouped into trips: a legislator carries all their bills between two places in one walk. */
@@ -760,7 +774,7 @@ export class WorldScene extends Phaser.Scene {
   /** Out of the legislator's chamber door and along the streets to a site. */
   private pathFromSeat(memberId: string, site: Site): Point[] {
     const chamber = this.homeChamber(memberId) ?? "House";
-    const rect = this.layout.chambers[chamber];
+    const rect = this.layout.chambers[chamber]!;
     const door = { x: (rect.x + rect.w / 2) * TILE, y: (rect.y + rect.h) * TILE - 6 };
     const floor = this.layout.sites.get(`floor:${chamber}`)!;
     const points: Point[] = [door, ...(site.key === floor.key ? [anchorOf(floor)] : route(floor, site))];
@@ -770,11 +784,12 @@ export class WorldScene extends Phaser.Scene {
   private robotLegs(trip: Trip): { points: Point[]; belt: boolean }[] {
     const bill = this.bills.get(trip.bills[0])!;
     const chamber = bill.type.startsWith("S") ? "Senate" : "House";
-    const desk = this.layout.sites.get(`referral_desk:${chamber}`)!;
-    if (!trip.from) return trip.to.style === "hopper" ? [] : [{ points: route(desk, trip.to), belt: false }];
-    if (trip.from.style === "hopper") {
-      const wing = trip.from.wing === "Senate" ? "Senate" : "House";
-      const belt = this.layout.conveyors[wing];
+    // A new item sets out from the world's starting place: the referral desk here, the White House next door.
+    const desk = this.layout.sites.get(this.layout.origin ?? `referral_desk:${chamber}`)!;
+    if (!trip.from) return trip.to.style === "hopper" || trip.to.key === desk.key ? [] : [{ points: route(desk, trip.to), belt: false }];
+    const wing = trip.from.wing === "Senate" ? "Senate" : "House";
+    const belt = this.layout.conveyors[wing];
+    if (trip.from.style === "hopper" && belt) {
       const ride = [
         { x: belt.from.x * TILE, y: belt.from.y * TILE },
         { x: belt.to.x * TILE, y: belt.to.y * TILE },
@@ -825,7 +840,7 @@ export class WorldScene extends Phaser.Scene {
     const legs = this.robotLegs(trip);
     const bill = this.bills.get(trip.bills[0])!;
     this.moveBill(bill.id, null);
-    const paperKey = `paper-${bill.type.startsWith("S") ? "Senate" : "House"}`;
+    const paperKey = paperOf(bill);
     const runLeg = (index: number) => {
       if (index >= legs.length) return this.deliver(trip);
       const leg = legs[index];
@@ -859,7 +874,7 @@ export class WorldScene extends Phaser.Scene {
     this.memberSprites.set(id, sprite);
     const walker: Walker = {
       tag: this.text(sprite.x, sprite.y, `${member.name.split(" ").slice(-1)[0]}${trip.role && trip.role !== "sponsor" ? `\n${trip.role}` : ""}`, 7).setOrigin(0.5, 0),
-      paper: this.add.image(sprite.x, sprite.y, `paper-${first.type.startsWith("S") ? "Senate" : "House"}`).setDepth(DEPTH.mover + 1).setVisible(false),
+      paper: this.add.image(sprite.x, sprite.y, paperOf(first)).setDepth(DEPTH.mover + 1).setVisible(false),
       count: trip.bills.length > 1 ? this.text(sprite.x, sprite.y, `×${trip.bills.length}`, 7, PALETTE.yellow).setOrigin(0, 0.5).setVisible(false) : undefined,
     };
     this.walkers.set(id, walker);
@@ -941,8 +956,8 @@ function formatDay(day: string): string {
 
 const siteKeyOfPlace = (place: string) => (place === "House" || place === "Senate" ? `floor:${place}` : `committee:${place}`);
 
-export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks): WorldScene {
-  const scene = new WorldScene(world, hooks);
+export function startGame(parent: HTMLElement, world: World, hooks: SceneHooks, layout?: (world: World) => Layout): WorldScene {
+  const scene = new WorldScene(world, hooks, layout);
   const interior = new InteriorScene(world, {
     pick: (id) => scene.select({ type: "member", id }, false),
     pile: (place) => scene.select({ type: "site", id: siteKeyOfPlace(place) }, false),

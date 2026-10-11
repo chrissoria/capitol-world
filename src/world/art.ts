@@ -97,6 +97,8 @@ function roofColors(entry: Site): [string, string] {
       return [PALETTE.steel, PALETTE.steelDark];
     case "library":
       return ["#8cc0aa", "#64997f"]; // weathered copper
+    case "department":
+      return ["#4f6f9c", "#3a557c"];
     default:
       if (entry.wing === "Senate") return [PALETTE.senate, PALETTE.senateDark];
       if (entry.wing === "House") return [PALETTE.house, PALETTE.houseDark];
@@ -374,6 +376,22 @@ function drawChamber(ctx: CanvasRenderingContext2D, entry: Site) {
   }
 }
 
+/** A gateway in a hedge, with the road running through it: the way to another world. */
+function drawGate(ctx: CanvasRenderingContext2D, entry: Site) {
+  const { x, y, w, h } = scale(entry.rect);
+  box(ctx, x, y + h - 22, w, 22, PALETTE.ink);
+  box(ctx, x + 1, y + h - 21, w - 2, 20, "#3f8f4a");
+  for (let lx = x + 4; lx < x + w - 4; lx += 7) box(ctx, lx, y + h - 18 + ((lx / 7) % 2) * 5, 3, 3, "#58a85f");
+  const mid = x + Math.round(w / 2);
+  framed(ctx, mid - 16, y + 2, 32, h - 2, PALETTE.stone);
+  box(ctx, mid - 10, y + 14, 20, h - 14, PALETTE.path);
+  box(ctx, mid - 11, y + 13, 22, 1, PALETTE.ink);
+  box(ctx, mid - 11, y + 13, 1, h - 13, PALETTE.ink);
+  box(ctx, mid + 10, y + 13, 1, h - 13, PALETTE.ink);
+  framed(ctx, mid - 18, y, 36, 6, PALETTE.wall);
+  for (const px of [-16, 12]) framed(ctx, mid + px, y + 6, 4, 8, PALETTE.gold);
+}
+
 /** A copper-green roof and dome with the torch of learning on top, after the Jefferson Building. */
 function drawLibrary(ctx: CanvasRenderingContext2D, entry: Site) {
   drawRoofed(ctx, entry);
@@ -550,15 +568,18 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
   }
 
   // Reflecting pool.
-  const pool = scale(layout.pool);
-  framed(ctx, pool.x - 3, pool.y - 3, pool.w + 6, pool.h + 6, PALETTE.stone);
-  framed(ctx, pool.x, pool.y, pool.w, pool.h, PALETTE.water);
-  for (let wy = pool.y + 6; wy < pool.y + pool.h - 4; wy += 9)
-    for (let wx = pool.x + 5 + ((wy / 9) % 2) * 8; wx < pool.x + pool.w - 8; wx += 20) box(ctx, wx, wy, 7, 1, PALETTE.waterLight);
-  block(layout.pool, 1);
+  if (layout.pool) {
+    const pool = scale(layout.pool);
+    framed(ctx, pool.x - 3, pool.y - 3, pool.w + 6, pool.h + 6, PALETTE.stone);
+    framed(ctx, pool.x, pool.y, pool.w, pool.h, PALETTE.water);
+    for (let wy = pool.y + 6; wy < pool.y + pool.h - 4; wy += 9)
+      for (let wx = pool.x + 5 + ((wy / 9) % 2) * 8; wx < pool.x + pool.w - 8; wx += 20) box(ctx, wx, wy, 7, 1, PALETTE.waterLight);
+    block(layout.pool, 1);
+  }
 
   // Conveyor beds (the moving chevrons are sprites on top).
   for (const belt of Object.values(layout.conveyors)) {
+    if (!belt) continue;
     const x1 = Math.min(belt.from.x, belt.to.x) * TILE;
     const w = Math.abs(belt.to.x - belt.from.x) * TILE;
     const y = belt.from.y * TILE - 7;
@@ -581,6 +602,7 @@ export function drawGround(layout: Layout, markers: LawnMarker[] = [], seed = 0)
     else if (entry.style === "whitehouse") drawWhiteHouse(ctx, entry);
     else if (entry.style === "memorial") drawMemorial(ctx, entry);
     else if (entry.style === "library") drawLibrary(ctx, entry);
+    else if (entry.style === "gate") drawGate(ctx, entry);
     else if (["inbox", "desk", "hopper"].includes(entry.style)) drawSmall(ctx, entry);
     else drawRoofed(ctx, entry);
   }

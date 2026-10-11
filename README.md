@@ -44,6 +44,20 @@ Congress, by policy area). A few small objects on the lawns (a ballot
 box, a shutdown barricade, a server rack) place each Congress in its years;
 they are scenery with a caption, listed in `src/world/era.ts`.
 
+## Worlds
+
+Capitol Hill is one of two maps. The White House world is about executive
+orders: the White House at the head of a lawn, the departments down both sides,
+each order at the department it mostly directs, revoked orders kept apart, and a
+picker by presidency back to 1791. The White House on the Capitol map has a door
+to it, and its gate leads back; the address (`?world=whitehouse&term=39`) says
+which world and period is on show.
+
+A world is described by one definition in `src/worlds/` (see `types.ts`): where
+its data comes from, how its buildings are laid out, its words, and what its
+whiteboard can plot. The scene, panel, search, statistics, whiteboard and travel
+are shared, so a new world is a data adapter, a layout and a vocabulary.
+
 Live at <https://christophersoria.com/capitol-world/>.
 
 ## Data
@@ -78,6 +92,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 
 ## Layout
 
+- `src/worlds/` one definition per world (Capitol Hill, the White House) and the shape they share
 - `src/data/` snapshot types and loading
 - `src/world/layout.ts` the map: sites, streets and routes
 - `src/world/era.ts` the signs of the times drawn on the lawns of each Congress

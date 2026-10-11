@@ -32,7 +32,9 @@ export type SiteStyle =
   | "archive"
   | "hall"
   | "memorial"
-  | "library";
+  | "library"
+  | "department"
+  | "gate";
 
 export interface Site {
   key: string;
@@ -46,20 +48,28 @@ export interface Site {
   /** Street in front of the dock that robots drive along. */
   lane: number;
   capacity: number;
+  /** For a gate: the world a click on it leads to. */
+  travel?: string;
 }
 
 export interface Layout {
   sites: Map<string, Site>;
-  chambers: Record<"House" | "Senate", Rect>;
-  conveyors: Record<"House" | "Senate", { from: { x: number; y: number }; to: { x: number; y: number } }>;
-  pool: Rect;
+  chambers: Partial<Record<"House" | "Senate", Rect>>;
+  conveyors: Partial<Record<"House" | "Senate", { from: { x: number; y: number }; to: { x: number; y: number } }>>;
+  pool?: Rect;
+  /** Where a new item starts its first journey from, when it is not a hopper: a site key. */
+  origin?: string;
+  /** Items with one of these fates are laid at this site instead of where they stood. */
+  graveyard?: { fates: string[]; site: string };
+  /** The site for a location key, when the world does not use the Capitol's rules. */
+  siteOf?(loc: string | null): string | null;
   lanes: { y: number; x1: number; x2: number }[];
   avenues: { x: number; y1: number; y2: number }[];
 }
 
 const mirror = (rect: Rect): Rect => ({ ...rect, x: MAP_W - rect.x - rect.w });
 
-function site(
+export function makeSite(
   key: string,
   style: SiteStyle,
   label: string,
@@ -95,12 +105,12 @@ export function buildLayout(committees: Committee[]): Layout {
   const add = (entry: Site) => sites.set(entry.key, entry);
 
   // Top row.
-  add(site("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
-  add(site("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
-  add(site("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
-  add(site("library", "library", "Library of Congress", "Library", "Center", { x: 30, y: 3, w: 16, h: 8 }));
-  add(site("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", { x: 130, y: 3, w: 16, h: 8 }));
-  add(site("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
+  add(makeSite("president", "whitehouse", "White House", "White House", "Center", { x: 78, y: 2, w: 20, h: 9 }, { x: 82, w: 12 }));
+  add(makeSite("law", "archive", "Law Archive", "Law Archive", "Center", { x: 108, y: 3, w: 16, h: 8 }));
+  add(makeSite("adopted", "hall", "Resolutions Hall", "Resolutions", "Center", { x: 52, y: 3, w: 16, h: 8 }));
+  add(makeSite("library", "library", "Library of Congress", "Library", "Center", { x: 30, y: 3, w: 16, h: 8 }));
+  add(makeSite("memorial", "memorial", "Bill Memorial", "Bill Memorial", "Center", { x: 130, y: 3, w: 16, h: 8 }));
+  add(makeSite("conference", "conference", "Conference Room", "Conference", "Center", { x: 83, y: 18, w: 10, h: 8 }));
 
   const houseChamber: Rect = { x: 12, y: 17, w: 60, h: 27 };
   const wings: { chamber: "House" | "Senate"; flip: (r: Rect) => Rect }[] = [
@@ -112,15 +122,15 @@ export function buildLayout(committees: Committee[]): Layout {
 
   for (const { chamber, flip } of wings) {
     const floorDock = flip({ x: 30, y: 0, w: 24, h: 0 });
-    add(site(`floor:${chamber}`, "chamber", `${chamber} Floor`, `${chamber} Floor`, chamber, chambers[chamber], {
+    add(makeSite(`floor:${chamber}`, "chamber", `${chamber} Floor`, `${chamber} Floor`, chamber, chambers[chamber], {
       x: floorDock.x,
       w: floorDock.w,
     }));
-    add(site(`other_chamber:${chamber}`, "inbox", `${chamber} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
-    add(site(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 30, y: 48, w: 24, h: 6 })));
-    add(site(`referral_desk:${chamber}`, "desk", `${chamber} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
+    add(makeSite(`other_chamber:${chamber}`, "inbox", `${chamber} Inbox`, "Inbox", chamber, flip({ x: 73, y: 26, w: 6, h: 4 })));
+    add(makeSite(`calendar:${chamber}`, "calendar", `${chamber} Calendar`, "Calendar", chamber, flip({ x: 30, y: 48, w: 24, h: 6 })));
+    add(makeSite(`referral_desk:${chamber}`, "desk", `${chamber} Referral Desk`, "Referral Desk", chamber, flip({ x: 34, y: 93, w: 12, h: 5 })));
     const hopper = flip({ x: 6, y: 93, w: 9, h: 5 });
-    add(site(`hopper:${chamber}`, "hopper", `${chamber} Hopper`, "Hopper", chamber, hopper));
+    add(makeSite(`hopper:${chamber}`, "hopper", `${chamber} Hopper`, "Hopper", chamber, hopper));
     const desk = sites.get(`referral_desk:${chamber}`)!.rect;
     const beltY = hopper.y + 2.5;
     conveyors[chamber] =
@@ -135,13 +145,13 @@ export function buildLayout(committees: Committee[]): Layout {
       const col = index % 6;
       const row = Math.floor(index / 6);
       const rect = flip({ x: 5 + 12 * col, y: 59 + 8 * row, w: 10, h: 5 });
-      add(site(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), chamber, rect));
+      add(makeSite(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), chamber, rect));
     });
   }
 
   const joint = committees.filter((c) => c.chamber !== "House" && c.chamber !== "Senate" && c.n_bills > 0);
   joint.forEach((committee, index) => {
-    add(site(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), "Center", {
+    add(makeSite(`committee:${committee.code}`, "committee", committee.name, shortName(committee.name), "Center", {
       x: 83,
       y: 67 + 8 * index,
       w: 10,
@@ -149,7 +159,11 @@ export function buildLayout(committees: Committee[]): Layout {
     }));
   });
 
-  // Streets: every site gets a lane from its dock to its avenue; centre sites reach both.
+  return { sites, chambers, conveyors, pool: { x: 85, y: 48, w: 6, h: 14 }, ...streets(sites) };
+}
+
+/** Streets for a set of sites: a lane from each dock to its avenue (centre sites reach both), and the two avenues. */
+export function streets(sites: Map<string, Site>): Pick<Layout, "lanes" | "avenues"> {
   const lanes: Layout["lanes"] = [];
   for (const entry of sites.values()) {
     const centre = entry.dock.x + entry.dock.w / 2;
@@ -158,12 +172,7 @@ export function buildLayout(committees: Committee[]): Layout {
     else lanes.push({ y: entry.lane, x1: Math.min(entry.dock.x, AVENUE_HOUSE), x2: Math.max(entry.dock.x + entry.dock.w, AVENUE_SENATE + 2) });
   }
   for (const y of CROSSINGS) lanes.push({ y, x1: AVENUE_HOUSE, x2: AVENUE_SENATE + 2 });
-
   return {
-    sites,
-    chambers,
-    conveyors,
-    pool: { x: 85, y: 48, w: 6, h: 14 },
     lanes,
     avenues: [
       { x: AVENUE_HOUSE, y1: AVENUE_TOP, y2: AVENUE_BOTTOM },

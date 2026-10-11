@@ -22,6 +22,16 @@ export interface BoardData {
   caption: string;
 }
 
+/** What a world's whiteboard can plot, where it differs from the Capitol's. */
+export interface BoardConfig {
+  /** [key, label, the stage a row must have reached to count; 0 counts every row]. */
+  measures: [BoardSpec["measure"], string, number][];
+  /** Labels for the four ways to split, in the order party, time, period, area. */
+  across: [BoardSpec["across"], string][];
+  /** The name of one period in a chart: "118th", "Obama". */
+  group(period: number): string;
+}
+
 export interface BoardSpec {
   measure: "introduced" | "reported" | "voted" | "passed" | "law";
   across: "party" | "time" | "congress" | "area";
@@ -73,15 +83,18 @@ interface Bar {
   color: string;
 }
 
-export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) => void, outside: () => CanvasImageSource | null = () => null) {
+export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) => void, outside: () => CanvasImageSource | null = () => null, config?: BoardConfig) {
+  const measures = config?.measures ?? MEASURES;
+  const splits = config?.across ?? ACROSS;
+  const group = config?.group ?? ((period: number) => ordinal(period));
   const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const pick = <T extends string>(id: string, options: [T, string][]) => {
     const node = el("select", { id, "aria-label": id });
     for (const [value, label] of options) node.append(el("option", { value }, label));
     return node;
   };
-  const measure = pick("wb-measure", MEASURES.map(([key, label]) => [key, label] as [BoardSpec["measure"], string]));
-  const across = pick("wb-across", ACROSS);
+  const measure = pick("wb-measure", measures.map(([key, label]) => [key, label] as [BoardSpec["measure"], string]));
+  const across = pick("wb-across", splits);
   const who = pick("wb-who", WHO);
   // The years to plot, for a closer look at part of what the Stats panel has chosen.
   const fromYear = el("select", { id: "wb-from", "aria-label": "From year" });
@@ -95,10 +108,10 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     const all = [...new Set(rows.map((row) => row.introduced.slice(0, 4)).filter(Boolean))].sort();
     if (all.join() !== known) {
       known = all.join();
-      for (const [node, fallback] of [[fromYear, all[0]], [toYear, all[all.length - 1]]] as const) {
-        const keep = node.value;
+      // A different span of years: start again from the whole of it.
+      for (const [node, whole] of [[fromYear, all[0]], [toYear, all[all.length - 1]]] as const) {
         node.replaceChildren(...all.map((year) => el("option", { value: year }, year)));
-        node.value = all.includes(keep) ? keep : (fallback ?? "");
+        node.value = whole ?? "";
       }
       years.hidden = all.length < 2;
     }
@@ -171,7 +184,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     plant,
     el("div", { class: "wb-frame" },
       el("div", { class: "wb-bar" }, measure, across, who, years, zoom, close),
-      el("p", { class: "wb-hint" }, "Which Congresses, period, kind of measure and chamber are counted is chosen in the Stats panel."),
+      el("p", { class: "wb-hint" }, config ? "Which periods are counted is chosen in the Stats panel." : "Which Congresses, period, kind of measure and chamber are counted is chosen in the Stats panel."),
       sheet,
       el("div", { class: "wb-tray" }, el("i", { class: "R" }), el("i", { class: "D" }), el("i", { class: "I" }), el("i", {}), el("b", {}))),
   );
@@ -205,8 +218,8 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
 
     const data = source();
     const spec: BoardSpec = { measure: measure.value as BoardSpec["measure"], across: across.value as BoardSpec["across"], who: who.value as BoardSpec["who"] };
-    const [, title, stage] = MEASURES.find(([key]) => key === spec.measure)!;
-    const split = ACROSS.find(([key]) => key === spec.across)![1];
+    const [, title, stage] = measures.find(([key]) => key === spec.measure) ?? measures[0];
+    const split = splits.find(([key]) => key === spec.across)![1];
     const only = spec.who && spec.across !== "party" ? `, ${WHO.find(([key]) => key === spec.who)![1]}` : "";
     const small = Math.max(11, Math.min(15, width / 42));
     write(`${title} ${split}${only}`, 18, 30, Math.max(15, Math.min(24, width / 26)), PEN.black, "left");
@@ -300,7 +313,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
         .map((party) => ({ label: party === "R" ? "Republicans" : party === "D" ? "Democrats" : "Independents", value: valueOf(groups.get(party)!), count: groups.get(party)!.length, color: penOf(party) }));
     } else if (spec.across === "congress") {
       const groups = groupBy((row) => String(row.congress));
-      bars = [...groups.keys()].sort().map((k) => ({ label: ordinal(Number(k)), value: valueOf(groups.get(k)!), count: groups.get(k)!.length, color: penOf(spec.who) }));
+      bars = [...groups.keys()].sort((a, b) => Number(a) - Number(b)).map((k) => ({ label: group(Number(k)), value: valueOf(groups.get(k)!), count: groups.get(k)!.length, color: penOf(spec.who) }));
     } else {
       const groups = groupBy((row) => row.area);
       bars = [...groups.entries()]
@@ -465,7 +478,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     },
     /** Show the board, optionally with a particular chart. */
     open(spec: Partial<BoardSpec> = {}) {
-      if (spec.measure) measure.value = spec.measure;
+      if (spec.measure && measures.some(([key]) => key === spec.measure)) measure.value = spec.measure;
       if (spec.across) across.value = spec.across;
       if (spec.who !== undefined) who.value = spec.who;
       if (root.hidden) {

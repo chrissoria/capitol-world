@@ -56,6 +56,8 @@ export interface Bill {
   url: string;
   /** Why the bill is dead (see FATES); absent for a bill that is alive or that succeeded. */
   fate?: string;
+  /** Other items this one acts on or is acted on by, as ids: an order's revocations, say. */
+  links?: Record<string, string[]>;
 }
 
 export interface MoveEvent {
@@ -151,5 +153,6 @@ export function billLabel(bill: { type: string; number: string }): string {
     HCONRES: "H.Con.Res.",
     SCONRES: "S.Con.Res.",
   };
+  if (bill.type === "EO") return /^\d/.test(bill.number) ? `Executive Order ${bill.number}` : "Executive order";
   return `${names[bill.type] ?? bill.type} ${bill.number}`;
 }

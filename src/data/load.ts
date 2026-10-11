@@ -6,8 +6,10 @@ const BUNDLED = `${import.meta.env.BASE_URL}fixtures/`;
 
 /** The finished Congress the address asks for with `?congress=118`, or null for the current one. */
 export function congressInAddress(): number | null {
-  const asked = Number(new URLSearchParams(location.search).get("congress"));
-  return Number.isInteger(asked) && asked > 0 ? asked : null;
+  const query = new URLSearchParams(location.search);
+  const raw = query.get("congress") ?? query.get("term");
+  const asked = raw === null || raw === "" ? NaN : Number(raw);
+  return Number.isInteger(asked) && asked >= 0 ? asked : null;
 }
 
 /** The finished Congress on show, or null for the current one. */
@@ -16,6 +18,21 @@ export let archived: number | null = congressInAddress();
 /** Show another Congress (null for the current one). Its files load again when they are next asked for. */
 export function setCongress(congress: number | null) {
   archived = congress;
+  committeeFile = undefined;
+}
+
+/** Where another world's data comes from, in the shapes the Capitol's files have. */
+export interface DataProvider {
+  world(period: number | null): Promise<World>;
+  search(period: number | null): Promise<SearchIndex>;
+  line(): Promise<CongressEntry[]>;
+}
+
+let provider: DataProvider | null = null;
+
+/** Read from another world's data (null for the Capitol's own files). */
+export function useProvider(next: DataProvider | null) {
+  provider = next;
   committeeFile = undefined;
 }
 
@@ -31,7 +48,7 @@ function preferred(): DataSource {
   return import.meta.env.DEV ? "bundled" : "live";
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+export async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-cache" });
   if (!response.ok) throw new Error(`${response.status} for ${url}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
@@ -63,6 +80,7 @@ async function currentFile<T>(file: string): Promise<{ data: T; source: DataSour
 }
 
 export async function loadWorld(): Promise<{ world: World; source: DataSource }> {
+  if (provider) return { world: await provider.world(archived), source: "live" };
   const { data, source } = await fromEither<World>(archived ? "world.json.gz" : "world.json");
   if (data.schema !== 1 || !Array.isArray(data.bills) || !Array.isArray(data.members)) {
     throw new Error("world.json is not in the expected format");
@@ -79,6 +97,7 @@ let committeeFile: Promise<CommitteeFile> | undefined;
 
 /** Committee rosters and meetings, loaded the first time a committee is opened. */
 export function loadCommittees(): Promise<CommitteeFile> {
+  if (provider) return Promise.reject(new Error("this world has no committees"));
   committeeFile ??= fromEither<CommitteeFile>(archived ? "committees.json.gz" : "committees.json").then((result) => result.data);
   return committeeFile;
 }
@@ -87,6 +106,7 @@ const searchIndexes = new Map<number | null, Promise<SearchIndex>>();
 
 /** Every bill of one Congress (null for the current one). Kept once loaded, whichever Congress is on show. */
 export function loadSearchOf(congress: number | null): Promise<SearchIndex> {
+  if (provider) return provider.search(congress);
   let index = searchIndexes.get(congress);
   if (!index) {
     index = congress
@@ -114,6 +134,7 @@ let congressLine: Promise<CongressEntry[]> | undefined;
 
 /** Every Congress that can be opened, the current one first. Empty if the list cannot be read. */
 export function loadCongressLine(): Promise<CongressEntry[]> {
+  if (provider) return provider.line();
   congressLine ??= loadCongresses().then((list) => {
     if (!list.length) return [];
     const current = Math.max(...list.map((item) => item.congress)) + 1;

@@ -26,6 +26,28 @@ const PARTIES: [string, string][] = [
   ["I", "Independents"],
 ];
 
+/** The words and choices of a world whose items are not bills: executive orders, say. */
+export interface StatsWords {
+  /** The label over the two period pickers: "Presidents". */
+  periods: string;
+  periodLabel(entry: CongressEntry): string;
+  /** "executive orders" and "signed", as in "289 executive orders signed". */
+  noun: string;
+  verb: string;
+  whole: string;
+  /** How to say which periods are counted: "under Barack Obama", "from Obama to Trump". */
+  where(first: CongressEntry, last: CongressEntry): string;
+  /** The one thing that can happen to an item here, counted where bills count becoming law. */
+  reached: string;
+  outcomeTitle: string;
+  outcomeNote: string;
+  byPeriod: string;
+  byParty: string;
+  most: string;
+  areas: string;
+  footnote: string;
+}
+
 interface Row {
   congress: number;
   introduced: string;
@@ -93,7 +115,8 @@ function toRows(data: SearchIndex, congress: number): Row[] {
   });
 }
 
-export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void, board: Whiteboard) {
+export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void, board: Whiteboard, cfg?: StatsWords) {
+  const nameOf = (entry: CongressEntry) => cfg?.periodLabel(entry) ?? `${ordinal(entry.congress)} · ${yearsOf(entry)}`;
   const members = new Map(world.members.map((member) => [member.id, member]));
   const select = (id: string, options: [string, string][], value: string) => {
     const node = el("select", { id });
@@ -110,20 +133,17 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
   const from = select("s-from", [[String(world.congress), `${ordinal(world.congress)} Congress`]], String(world.congress));
   const to = select("s-to", [[String(world.congress), `${ordinal(world.congress)} Congress`]], String(world.congress));
   const period = select("s-period", [], "");
-  const kind = select("s-kind", KINDS, "law");
+  const kind = select("s-kind", KINDS, cfg ? "all" : "law");
   const chamber = select("s-chamber", [["", "Both chambers"], ["House", "House"], ["Senate", "Senate"]], "");
   const body = el("div", {});
   add(
     section,
     el("h2", {}, "Statistics"),
-    el("label", { for: "s-from" }, "Congresses"),
+    el("label", { for: "s-from" }, cfg?.periods ?? "Congresses"),
     el("div", { class: "pair" }, from, el("span", {}, "to"), to),
-    el("label", { for: "s-period" }, "Introduced in"),
+    el("label", { for: "s-period" }, cfg ? `${cfg.verb[0].toUpperCase()}${cfg.verb.slice(1)} in` : "Introduced in"),
     period,
-    el("label", { for: "s-kind" }, "Kind of measure"),
-    kind,
-    el("label", { for: "s-chamber" }, "Started in"),
-    chamber,
+    ...(cfg ? [] : [el("label", { for: "s-kind" }, "Kind of measure"), kind, el("label", { for: "s-chamber" }, "Started in"), chamber]),
     body,
   );
 
@@ -161,11 +181,11 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
   function setPeriods() {
     const keep = period.value;
     if (single() && span()) {
-      fill(period, PERIODS.map(([key, label]) => [key, label] as [string, string]), keep || "month");
+      fill(period, PERIODS.map(([key, label]) => [key, key === "all" && cfg ? cfg.whole : label] as [string, string]), keep || (cfg ? "all" : "month"));
       return;
     }
     const years = [...new Set(rows.map((row) => row.introduced.slice(0, 4)).filter(Boolean))].sort();
-    const whole = single() ? "The whole Congress" : `All of it, ${chosenLine[0].years[0]}–${chosenLine[chosenLine.length - 1].years[1] ?? "now"}`;
+    const whole = single() ? (cfg?.whole ?? "The whole Congress") : `All of it, ${chosenLine[0].years[0]}–${chosenLine[chosenLine.length - 1].years[1] ?? "now"}`;
     fill(period, [["all", whole], ...years.map((year) => [`y${year}`, year] as [string, string])], keep.startsWith("y") ? keep : "all");
   }
 
@@ -237,7 +257,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     return drawable(el(
       "div",
       {},
-      el("h3", {}, `Introduced each ${unit}`),
+      el("h3", {}, `${cfg ? cfg.verb[0].toUpperCase() + cfg.verb.slice(1) : "Introduced"} each ${unit}`),
       el("div", { class: "chart", role: "img", "aria-label": `Bar chart of measures introduced each ${unit}, coloured by the sponsor's party` }, ...columns),
       el("div", { class: "chart-axis" }, el("span", {}, name(keys[0])), el("span", {}, `tallest bar: ${tallest.toLocaleString()}`), el("span", {}, name(keys[keys.length - 1]))),
     ), { measure: "introduced", across: "time", who: "" });
@@ -251,7 +271,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
   function paint() {
     counted = [];
     if (state === "failed") return put(body, el("p", { class: "note" }, "The statistics could not be loaded."));
-    if (state === "loading") return put(body, el("p", { class: "note" }, chosenLine.length > 1 ? `Loading every bill of ${chosenLine.length} Congresses…` : "Loading every bill of this Congress…"));
+    if (state === "loading") return put(body, el("p", { class: "note" }, cfg ? "Loading…" : chosenLine.length > 1 ? `Loading every bill of ${chosenLine.length} Congresses…` : "Loading every bill of this Congress…"));
     if (!rows.length) {
       return put(body, el("p", { class: "note" }, "These statistics need a newer copy of the data. They will appear after the next daily update."));
     }
@@ -285,10 +305,12 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       if (row.area) byArea.set(row.area, (byArea.get(row.area) ?? 0) + 1);
     }
 
-    const noun = kind.value === "law" ? "bills and joint resolutions" : kind.value === "res" ? "resolutions" : "measures";
+    const noun = cfg ? cfg.noun : kind.value === "law" ? "bills and joint resolutions" : kind.value === "res" ? "resolutions" : "measures";
     const first = chosenLine[0];
     const last = chosenLine[chosenLine.length - 1];
-    const where = single()
+    const where = cfg
+      ? cfg.where(first, last)
+      : single()
       ? `in the ${ordinal(first.congress)} Congress`
       : `in the ${ordinal(first.congress)} to ${ordinal(last.congress)} Congresses (${first.years[0]}–${last.years[1] ?? "now"})`;
     const when = days === 1 ? `on ${niceDate(latest)}` : days ? `from ${niceDate(since)} to ${niceDate(latest)}` : year ? `in ${year}` : where;
@@ -296,7 +318,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     const passedLabel = kind.value === "res" ? "Agreed to by a chamber" : "Passed at least one chamber";
     const votedNote = all.voted ? ` · ${percent(all.passed, all.voted)} of those that got a floor vote` : "";
 
-    caption = `${noun} introduced ${when}${chamber.value ? ` in the ${chamber.value}` : ""}`;
+    caption = `${noun} ${cfg?.verb ?? "introduced"} ${when}${chamber.value ? ` in the ${chamber.value}` : ""}`;
     const partyRows = PARTIES.filter(([key]) => byParty.get(key)!.introduced).map(([key, name]) => {
       const tally = byParty.get(key)!;
       return drawable(el(
@@ -307,9 +329,13 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
         el(
           "div",
           { class: "row-sub" },
-          `${percent(tally.introduced, all.introduced)} of the total. Floor vote ${percent(tally.voted, tally.introduced)} · passed a chamber ${percent(tally.passed, tally.introduced)}`,
-          canBecomeLaw ? ` · law ${percent(tally.law, tally.introduced)}` : "",
-          tally.voted ? `. Of those voted on, ${percent(tally.passed, tally.voted)} passed.` : ".",
+          ...(cfg
+            ? [`${percent(tally.introduced, all.introduced)} of the total · ${cfg.reached.toLowerCase()}: ${percent(tally.law, tally.introduced)}.`]
+            : [
+                `${percent(tally.introduced, all.introduced)} of the total. Floor vote ${percent(tally.voted, tally.introduced)} · passed a chamber ${percent(tally.passed, tally.introduced)}`,
+                canBecomeLaw ? ` · law ${percent(tally.law, tally.introduced)}` : "",
+                tally.voted ? `. Of those voted on, ${percent(tally.passed, tally.voted)} passed.` : ".",
+              ]),
         ),
       ), { measure: "introduced", across: "time", who: key as BoardSpec["who"] });
     });
@@ -323,13 +349,17 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
           return drawable(el(
             "li",
             {},
-            el("div", { class: "bar-row" }, el("span", {}, `${ordinal(entry.congress)} · ${yearsOf(entry)}`), el("span", { class: "count" }, tally.introduced.toLocaleString())),
+            el("div", { class: "bar-row" }, el("span", {}, nameOf(entry)), el("span", { class: "count" }, tally.introduced.toLocaleString())),
             el("div", { class: "meter" }, el("i", { style: `width:${(tally.introduced / most) * 100}%` })),
             el(
               "div",
               { class: "row-sub" },
-              `Out of committee ${percent(tally.reported, tally.introduced)} · passed a chamber ${percent(tally.passed, tally.introduced)}`,
-              canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law (${percent(tally.law, tally.introduced)})` : "",
+              ...(cfg
+                ? [`${cfg.reached}: ${tally.law.toLocaleString()} (${percent(tally.law, tally.introduced)})`]
+                : [
+                    `Out of committee ${percent(tally.reported, tally.introduced)} · passed a chamber ${percent(tally.passed, tally.introduced)}`,
+                    canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law (${percent(tally.law, tally.introduced)})` : "",
+                  ]),
               entry.live ? " · still under way" : "",
             ),
           ), { measure: canBecomeLaw ? "law" : "passed", across: "congress", who: "" });
@@ -343,7 +373,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
         const label = member ? `${member.name} (${member.party}-${member.state})` : name;
         if (!label) return null;
         const title = el("span", { class: "row-title" }, el("span", { class: `pin ${member?.party ?? party}` }), label);
-        const sub = el("span", { class: "row-sub" }, `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a chamber${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`);
+        const sub = el("span", { class: "row-sub" }, cfg ? `${tally.introduced.toLocaleString()} ${cfg.verb} · ${cfg.reached.toLowerCase()}: ${tally.law.toLocaleString()}` : `${tally.introduced.toLocaleString()} introduced · ${tally.passed.toLocaleString()} passed a chamber${canBecomeLaw ? ` · ${tally.law.toLocaleString()} became law` : ""}`);
         if (!member) return el("li", {}, el("div", { class: "plain-row" }, title, sub)); // not in the Congress on show
         const button = el("button", { type: "button" }, title, sub);
         button.addEventListener("click", () => pickMember(member.id));
@@ -360,41 +390,53 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       el("p", { class: "note" }, "Pick any figure to draw it on the whiteboard."),
       drawable(el("div", { class: "stat-big" }, all.introduced.toLocaleString()), { measure: "introduced", across: "party", who: "" }),
       el("p", {}, `${caption}.`),
-      all.introduced ? el("h3", {}, live ? "How far they have got" : "How far they got") : null,
+      all.introduced ? el("h3", {}, cfg ? cfg.outcomeTitle : live ? "How far they have got" : "How far they got") : null,
       all.introduced
         ? el(
             "ul",
             { class: "list" },
-            bar("Out of committee", all.reported, all.introduced, "reported"),
-            bar("Got a floor vote", all.voted, all.introduced, "voted"),
-            bar(passedLabel, all.passed, all.introduced, "passed", votedNote),
-            canBecomeLaw ? bar("Passed both chambers", all.both, all.introduced, "passed") : null,
-            canBecomeLaw ? bar("Became law", all.law, all.introduced, "law") : null,
+            ...(cfg
+              ? [bar(cfg.reached, all.law, all.introduced, "law")]
+              : [
+                  bar("Out of committee", all.reported, all.introduced, "reported"),
+                  bar("Got a floor vote", all.voted, all.introduced, "voted"),
+                  bar(passedLabel, all.passed, all.introduced, "passed", votedNote),
+                  canBecomeLaw ? bar("Passed both chambers", all.both, all.introduced, "passed") : null,
+                  canBecomeLaw ? bar("Became law", all.law, all.introduced, "law") : null,
+                ]),
           )
         : null,
       all.introduced
         ? el(
             "p",
             { class: "note" },
-            live ? "These follow the same measures counted above, so recent ones have had less time to move." : `${single() ? "This Congress has" : "These Congresses have"} ended, so these are final.`,
-            " A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.",
+            ...(cfg
+              ? [cfg.outcomeNote]
+              : [
+                  live ? "These follow the same measures counted above, so recent ones have had less time to move." : `${single() ? "This Congress has" : "These Congresses have"} ended, so these are final.`,
+                  " A floor vote here means the measure passed a chamber, or its latest action is a vote it lost.",
+                ]),
           )
         : null,
-      congressRows.length ? el("h3", {}, "By Congress") : null,
+      congressRows.length ? el("h3", {}, cfg?.byPeriod ?? "By Congress") : null,
       el("ul", { class: "list" }, ...congressRows),
-      partyRows.length ? el("h3", {}, "By sponsor’s party") : null,
+      partyRows.length ? el("h3", {}, cfg?.byParty ?? "By sponsor’s party") : null,
       el("ul", { class: "list" }, ...partyRows),
       chart(chosen, since, days, year ? chosen.reduce((max, row) => (row.introduced > max ? row.introduced : max), "") : latest),
-      sponsorRows.length ? el("h3", {}, "Who introduced the most") : null,
+      sponsorRows.length ? el("h3", {}, cfg?.most ?? "Who introduced the most") : null,
       el("ul", { class: "list" }, ...sponsorRows),
-      areaRows.length ? el("h3", {}, "Most common policy areas") : null,
+      areaRows.length ? el("h3", {}, cfg?.areas ?? "Most common policy areas") : null,
       el("ul", { class: "list" }, ...areaRows),
       el(
         "p",
         { class: "note" },
-        `Counted from ${rows.length.toLocaleString()} measures of ${single() ? "this Congress" : `${chosenLine.length} Congresses`}, by the date each was introduced. `,
-        live ? (pending ? `That includes ${pending.toLocaleString()} too new to have published text. ` : "The newest few may be missing until their text is published. ") : "",
-        "Party is the sponsor’s; cosponsors are not counted.",
+        ...(cfg
+          ? [cfg.footnote]
+          : [
+              `Counted from ${rows.length.toLocaleString()} measures of ${single() ? "this Congress" : `${chosenLine.length} Congresses`}, by the date each was introduced. `,
+              live ? (pending ? `That includes ${pending.toLocaleString()} too new to have published text. ` : "The newest few may be missing until their text is published. ") : "",
+              "Party is the sponsor’s; cosponsors are not counted.",
+            ]),
       ),
     );
   }
@@ -411,7 +453,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       void loadCongressLine().then((entries) => {
         if (entries.length < 2 || !section.isConnected) return;
         line = entries;
-        const options = entries.map((entry) => [String(entry.congress), `${ordinal(entry.congress)} · ${yearsOf(entry)}`] as [string, string]);
+        const options = entries.map((entry) => [String(entry.congress), nameOf(entry)] as [string, string]);
         fill(from, options, from.value);
         fill(to, options, to.value);
       });
