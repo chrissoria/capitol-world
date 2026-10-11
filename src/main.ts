@@ -105,6 +105,8 @@ async function main() {
 
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
   const replayButton = $<HTMLButtonElement>("replay");
+  const storyButton = $<HTMLButtonElement>("replay-all"); // the whole period, in a world that can replay it
+  storyButton.textContent = def.words.replayAll ?? "";
   const backButton = $<HTMLButtonElement>("back");
   const musicButton = $<HTMLButtonElement>("music");
   const showMusic = () => {
@@ -133,6 +135,8 @@ async function main() {
     onClock(label, progress) {
       clock.hidden = label === null;
       replayButton.textContent = label === null ? replayLabel : skipLabel;
+      storyButton.hidden = label !== null || !scene.hasStory || !def.words.replayAll || Boolean(scene.place);
+      replayButton.hidden = label === null && !scene.hasEvents;
       if (label !== null) {
         $("clock-day").textContent = label;
         (clock.querySelector("i") as HTMLElement).style.width = `${Math.round(progress * 100)}%`;
@@ -151,6 +155,7 @@ async function main() {
       music.setTrack(!inside ? "map" : inside.place === "House" || inside.place === "Senate" || def.key !== "capitol" ? "inside" : "committee");
       backButton.hidden = !inside;
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
+      storyButton.hidden = Boolean(inside) || !scene.hasStory || !def.words.replayAll;
       $("fit").textContent = inside ? "Whole building" : "Whole map";
       $("stamp").textContent = inside ? `Inside ${inside.label} · ${inside.note}` : stamp;
     },
@@ -171,6 +176,7 @@ async function main() {
         mapView: () => (scene.textures.exists("ground") ? (scene.textures.get("ground").getSourceImage() as HTMLCanvasElement) : null),
       }, def);
       replayButton.hidden = !scene.hasEvents;
+      storyButton.hidden = !scene.hasStory || !def.words.replayAll;
       const initial = targetFromHash();
       if (initial) scene.select(initial);
       else if (scene.hasEvents && !reducedMotion) scene.replay();
@@ -180,6 +186,7 @@ async function main() {
   showing = scene;
   if (import.meta.env.DEV) (window as unknown as { scene: WorldScene }).scene = scene;
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
+  storyButton.addEventListener("click", () => scene.replay(true));
   backButton.addEventListener("click", () => scene.leave());
   addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;

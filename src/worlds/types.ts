@@ -52,6 +52,8 @@ export interface Words {
   /** Names for the fates this world's items can meet, added to the shared list. */
   fates?: Record<string, { name: string; how: string }>;
   searchHint: string;
+  /** The words on the button that replays the whole period, in a world that can. */
+  replayAll?: string;
 }
 
 export interface WorldDef {
@@ -75,6 +77,8 @@ export interface WorldDef {
   /** What the whiteboard can plot, and how the Stats tab words its counts, when they differ from the Capitol's. */
   board?: BoardConfig;
   stats?: StatsWords;
+  /** A scene inside a building that an item's card can open: an argument re-staged in the Courtroom. */
+  staging?(bill: Bill): { place: string; label: string } | null;
   /** Anything more to say about one item, as lines for the inspector. */
   itemNotes?(bill: Bill, world: World): { heading: string; rows: { text: string; target?: string }[] }[];
   /** Where a click on a building of style "gate" leads. */

@@ -265,7 +265,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     const byStage = new Map<string, number>();
     for (const bill of world.bills) byStage.set(bill.loc.kind, (byStage.get(bill.loc.kind) ?? 0) + 1);
     const byArea = new Map<string, number>();
-    for (const bill of world.bills) byArea.set(bill.policy_area || noArea, (byArea.get(bill.policy_area || noArea) ?? 0) + 1);
+    for (const bill of world.bills) if (bill.policy_area || noArea) byArea.set(bill.policy_area || noArea, (byArea.get(bill.policy_area || noArea) ?? 0) + 1);
     const areaRows = [...byArea.entries()].sort((a, b) => b[1] - a[1]).map(([area, n]) => {
       const button = el("button", { type: "button" }, el("span", { class: "bar-row" }, el("span", { class: "row-title" }, area), el("span", { class: "count" }, String(n))));
       button.addEventListener("click", () => showArea(area));
@@ -357,6 +357,10 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
     const sponsorButton = sponsor ? el("button", { type: "button" }, pin(sponsor.party), memberLine(sponsor)) : null;
     sponsorButton?.addEventListener("click", () => actions.select({ type: "member", id: bill.sponsor }));
     // The map file carries the start of a long text; the rest arrives a moment after the card opens.
+    // A scene this item can be seen in: its argument, re-staged where it was heard.
+    const staging = def.staging?.(bill) ?? null;
+    const stageButton = el("button", { type: "button", class: "door" }, staging ? `${staging.label} →` : "");
+    if (staging) stageButton.addEventListener("click", () => actions.stage(staging.place, bill.id));
     const excerpt = world.summary_source === "excerpt";
     const asked = world.summary_source === "court";
     const summary = bill.summary ? el("p", { class: "long-text tall", tabindex: "0" }, bill.summary) : null;
@@ -376,6 +380,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
       el("h2", { class: bill.title.length > 220 ? "long-text title" : "", ...(bill.title.length > 220 ? { tabindex: "0" } : {}) }, bill.title),
       el("p", {}, el("span", { class: "chip stage" }, STAGES[bill.loc.kind] ?? bill.loc.kind), site && site.label !== STAGES[bill.loc.kind] ? el("span", { class: "chip" }, site.label) : null, bill.policy_area ? el("span", { class: "chip" }, bill.policy_area) : null),
       site && capitol ? explainSite(site) : null,
+      staging ? el("p", {}, stageButton) : null,
       el("h3", {}, words.actionHeading ?? (capitol ? "Latest action" : "Signed")),
       el("p", { class: "long-text", tabindex: "0" }, el("strong", {}, niceDate(bill.last_action.date)), " — ", bill.last_action.text),
       el("h3", {}, words.personHeading?.(bill) ?? words.person),

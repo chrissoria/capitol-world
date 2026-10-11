@@ -22,6 +22,8 @@ export interface InteriorHooks {
 export interface InteriorPlace {
   place: string; // "House", "Senate", or a committee code
   committee?: CommitteeRoomSpec;
+  /** A sitting is being re-staged: the floor passes from one speaker to the next. */
+  sitting?: boolean;
 }
 
 const FONT = '"Trebuchet MS", "Verdana", sans-serif';
@@ -120,6 +122,7 @@ export class InteriorScene extends Phaser.Scene {
   ready = false;
   wing: Wing = "House";
   private place = "House";
+  private sitting = false;
   private committee: CommitteeRoomSpec | undefined;
   private speaker: Agent | null = null;
   private nextSpeakerAt = 0;
@@ -151,6 +154,7 @@ export class InteriorScene extends Phaser.Scene {
   init(data: Partial<InteriorPlace>) {
     this.place = data.place ?? "House";
     this.committee = data.committee;
+    this.sitting = Boolean(data.sitting);
     this.wing = this.committee ? (this.committee.chamber === "Senate" ? "Senate" : "House") : this.place === "Senate" ? "Senate" : "House";
   }
 
@@ -359,8 +363,8 @@ export class InteriorScene extends Phaser.Scene {
           .setOrigin(0.5, 1)
           .setDepth(DEPTH.emote - 1);
       }
-      if (this.committee) {
-        agent.until = Number.POSITIVE_INFINITY; // in a meeting, members stay at the dais
+      if (this.committee || this.b.seated) {
+        agent.until = Number.POSITIVE_INFINITY; // in a meeting, members stay at the dais; the justices keep the bench
         continue;
       }
       // Start with the building already busy rather than everyone in their seat.
@@ -512,6 +516,11 @@ export class InteriorScene extends Phaser.Scene {
   }
 
   private next(agent: Agent) {
+    if (agent.member && this.b.seated) {
+      // In this building the named people keep their places: justices do not leave the bench.
+      agent.until = this.clock + seconds(20, 60);
+      return;
+    }
     if (!agent.steps.length) {
       if (!agent.member) {
         const errand = this.free("errand", agent);
@@ -624,7 +633,7 @@ export class InteriorScene extends Phaser.Scene {
         agent.emote.setVisible(showEmotes && (!talking || (this.clock + agent.phase) % 2600 < 1300));
       }
     }
-    if (this.committee?.session && this.clock >= this.nextSpeakerAt) this.passTheFloor();
+    if ((this.committee?.session || this.sitting) && this.clock >= this.nextSpeakerAt) this.passTheFloor();
     this.applyLod();
     if (this.selectedId) {
       const agent = this.agents.get(this.selectedId);

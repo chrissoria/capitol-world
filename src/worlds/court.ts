@@ -34,12 +34,14 @@ interface CourtFile {
   applications: {
     docket?: string[]; term: number[]; title: string[]; kind: number[]; filed: string[]; outcome: string[]; decided_by: string[];
     resolved: string[]; referred: number[]; capital: number[]; lower_court: number[]; url: string[];
+    /** The day it was referred to the full Court, and the seat of the justice it went to first. Absent in an older file. */
+    referred_on?: string[]; submitted_to?: number[];
   };
 }
 
 /** world/text/<term>.json.gz: [question, holding] for a case, [what was asked, the answer] for an application. */
 interface TextFile {
-  cases: Record<string, [string, string]>;
+  cases: Record<string, [string, string, string?]>;
   applications: Record<string, [string, string]>;
 }
 
@@ -99,6 +101,8 @@ const applicationId = (term: number, docket: string) => `${term}-app-${docket.to
 
 /** What the card of an item says beyond the common fields, kept beside the bills rather than on them. */
 const notes = new Map<string, { heading: string; rows: { text: string }[] }[]>();
+/** Cases whose argument can be re-staged in the Courtroom, with what to say of it. */
+const sittings = new Map<string, string>();
 /** What to say where a justice's name would go, for an item with no single author. */
 const unsigned = new Map<string, string>();
 
@@ -137,7 +141,7 @@ const provider: DataProvider = {
       if (author) wrote.set(cases.author[k], (wrote.get(cases.author[k]) ?? 0) + 1);
       const split = cases.majority[k] ? `${cases.majority[k]}–${cases.minority[k]}` : "";
       const date = cases.decided[k] || cases.argued[k] || cases.granted[k];
-      const [question, holding] = words.cases[cases.id[k]] ?? ["", ""];
+      const [question, holding, argument = ""] = words.cases[cases.id[k]] ?? ["", ""];
       const status = decided ? capital(disposition || "decided") : cases.stage[k] === "argued" ? "Argued" : cases.stage[k] === "set for argument" ? "Set for argument" : "Granted";
       bills.push({
         id: cases.id[k],
@@ -178,6 +182,7 @@ const provider: DataProvider = {
       notes.set(cases.id[k], [
         { heading: "What the Court held", rows: holding && decided ? [{ text: holding }] : [] },
         { heading: split ? `The vote: ${split}` : "The vote", rows: voteLines(data, row.justices, k).map((text) => ({ text })) },
+        { heading: "At argument", rows: argument ? [{ text: argument.replace(/\s*VIDED\.?\s*$/, "") }] : [] },
         { heading: "The record", rows: facts.map((text) => ({ text })) },
       ].filter((group) => group.rows.length));
     }
@@ -213,7 +218,8 @@ const provider: DataProvider = {
         { heading: "The answer", rows: answer && answer !== asked ? [{ text: answer }] : [] },
         { heading: "The record", rows: [
           `An application for ${kind === "other" ? "relief" : kind === "vacate" ? "an order vacating a ruling below" : /^[aeiou]/.test(kind) ? `an ${kind}` : `a ${kind}`}, filed ${day(applications.filed[k])}.`,
-          applications.referred[k] ? "The justice it went to referred it to the full Court." : "",
+          (applications.submitted_to?.[k] ?? -1) >= 0 ? `It went first to Justice ${data.justices[applications.submitted_to![k]].last_name}, who handles such requests from that part of the country.` : "",
+          applications.referred[k] ? `That justice referred it to the full Court${applications.referred_on?.[k] ? ` on ${day(applications.referred_on[k])}` : ""}.` : "",
           applications.capital[k] ? "A capital case." : "",
           data.application_courts[applications.lower_court[k]] ? `Came from: ${courtName(data.application_courts[applications.lower_court[k]])}.` : "",
         ].filter(Boolean).map((text) => ({ text })) },
@@ -240,6 +246,42 @@ const provider: DataProvider = {
         actor: null,
         actor_role: null,
       }));
+
+    // Every movement of the term in order, for the long replay. A case granted before the term opened starts on
+    // the calendar; an application comes up the avenue from the gate, and goes into the Court and back if it was
+    // referred to all nine.
+    const termStart = `${term}-10-01`;
+    const story: MoveEvent[] = [];
+    const move = (bill: string, date: string, from: string | null, to: string, text: string, via?: string) =>
+      date && date <= through && story.push({ bill, date, seq: 0, from, to, text, actor: null, actor_role: null, ...(via ? { via } : {}) });
+    for (let k = 0; k < cases.id.length; k++) {
+      if (cases.term[k] !== term) continue;
+      const id = cases.id[k];
+      const name = cases.name[k].slice(0, 110);
+      let at: string | null = cases.granted[k] && cases.granted[k] < termStart ? "calendar" : null;
+      if (cases.granted[k] >= termStart && move(id, cases.granted[k], null, "calendar", `${name}: review granted`)) at = "calendar";
+      if (cases.argued[k] && cases.argued[k] <= through) {
+        // A case argued in an earlier term and held over starts the story inside the Court.
+        if (cases.argued[k] >= termStart) move(id, cases.argued[k], at, "court", `${name}: argued`);
+        at = "court";
+        sittings.set(id, `the argument of ${day(cases.argued[k])} in ${cases.name[k]}, re-staged`);
+      }
+      if (cases.stage[k] === "decided") move(id, cases.decided[k], at, placeOf("decided", data.dispositions[cases.disposition[k]] ?? ""), `${name}: decided`);
+    }
+    for (let k = 0; k < (applications.docket?.length ?? 0); k++) {
+      if (applications.term[k] !== term) continue;
+      const id = applicationId(term, applications.docket![k]);
+      const title = applications.title[k].slice(0, 110);
+      if (applications.filed[k] < `${term}-06-01`) continue; // misfiled under the term: it would stretch the story back months
+      move(id, applications.filed[k], null, "emergency", `${title}: application filed`, "gate");
+      const referred = applications.referred_on?.[k] ?? "";
+      if (referred && applications.resolved[k] && referred <= applications.resolved[k]) {
+        move(id, referred, "emergency", "court", `${title}: referred to the full Court`);
+        move(id, applications.resolved[k], "court", "emergency", `${title}: ${applications.outcome[k] || "ruled on"}`);
+      }
+    }
+    story.sort((a, b) => a.date.localeCompare(b.date));
+    story.forEach((event, seq) => (event.seq = seq));
 
     const members: Member[] = row.justices.map((index) => {
       const justice = data.justices[index];
@@ -271,6 +313,7 @@ const provider: DataProvider = {
       committees: [],
       bills,
       events,
+      story,
       final,
       years: [term, term + 1],
       summary_source: "court",
@@ -353,6 +396,7 @@ function layout(): Layout {
     origin: "court",
     enterable: ["court"],
     piles: { court: "argued and awaiting a decision" },
+    staged: (itemId) => sittings.get(itemId) ?? null,
     siteOf: (loc) => (loc ? loc.split(":")[0] : null),
     ...streets(sites),
   };
@@ -402,6 +446,7 @@ export const court: WorldDef = {
     { site: "gate-whitehouse", to: "whitehouse", label: "Go to the White House →" },
   ],
   itemNotes: (bill) => notes.get(bill.id) ?? [],
+  staging: (bill) => (sittings.has(bill.id) ? { place: "court", label: "See it argued in the Courtroom" } : null),
   words: {
     item: "case",
     items: "cases",
@@ -425,10 +470,11 @@ export const court: WorldDef = {
     personHeading: (bill) => (bill.type === "APP" ? "Ruling" : "Opinion of the Court by"),
     noPerson: (bill) => unsigned.get(bill.id) ?? "No single author.",
     deadOnly: "",
-    noArea: "Not classified",
+    noArea: "", // applications, and the cases of a term not yet coded, are left out of the list by subject
     actionHeading: "Where it stands",
     readMore: (bill) => (bill.type === "APP" ? "See its docket at the Court ↗" : /oyez\.org/.test(bill.url) ? "Read about it on Oyez ↗" : "Read more ↗"),
     memberLine: (member) => `Wrote the opinion of the Court in ${member.n_total.toLocaleString()} case${member.n_total === 1 ? "" : "s"} this term.`,
     searchHint: "Case name or docket number",
+    replayAll: "▶ Replay the term",
   },
 };

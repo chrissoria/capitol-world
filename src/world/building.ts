@@ -78,6 +78,8 @@ export interface Building {
   calendar?: { x: number; y: number };
   /** People who keep to one room, by member id: the President does not wander the West Wing. */
   confined?: Map<string, string>;
+  /** The named people stay in their seats throughout: the justices on the bench. */
+  seated?: boolean;
 }
 
 export interface Leaders {
@@ -1683,6 +1685,8 @@ export function buildSupremeCourt(members: Member[]): Building {
       spot("desk", tx + 1, row, "down", "chambers", justice ? { owner: justice.id } : {});
     };
     desk(cx - 1, iy, justices[0]);
+    // Where a courier stops with papers for a justice: before the Chief's desk and along the aisle between the alcoves.
+    for (const row of [iy + 2, iy + 5, iy + 10, iy + 16]) spot("errand", cx, row, "up", "chambers");
     // Eleven alcoves. The first on our left is left out: the door from behind the bench opens there.
     for (let i = 1; i < 12; i++) {
       const right = i % 2 === 1;
@@ -1714,6 +1718,9 @@ export function buildSupremeCourt(members: Member[]): Building {
     }
     table(ix + 4, iy + 6, 5);
     for (let i = 0; i < 5; i++) papers((ix + 4) * T + 4 + i * 15, (iy + 6) * T - 5 + (i % 2) * 3);
+    // Applications come in here and are carried up to Chambers.
+    spot("errand", ix + 6, iy + 4, "down", "clerk");
+    spot("errand", ix + 6, iy + 7, "up", "clerk");
     plant(ix, iy + ih - 1);
     cooler(ix + iw - 1, iy + ih - 1);
   }
@@ -1806,7 +1813,8 @@ export function buildSupremeCourt(members: Member[]): Building {
     spots,
     seats,
     staff,
-    pages: 0,
+    pages: 3, // couriers between the Clerk's Office and Chambers
+    seated: true,
     cells,
     // The count goes on the carpet in front of the Clerk's desk: above it is the Clerk's head.
     clerk: { x: (c - 9) * T + 8, y: wellDesks * T - 2, labelDy: 28 },

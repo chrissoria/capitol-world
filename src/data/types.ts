@@ -106,6 +106,8 @@ export interface MoveEvent {
   text: string;
   /** Member id of the legislator who carried the bill, when known. */
   actor?: string | null;
+  /** For an item appearing for the first time (`from` is null): the site it sets out from, if not the world's usual one. */
+  via?: string;
   actor_role?: string | null;
 }
 
@@ -130,6 +132,8 @@ export interface World {
   committees: Committee[];
   bills: Bill[];
   events: MoveEvent[];
+  /** Every movement of the period in order, for a world that can replay the whole of it. */
+  story?: MoveEvent[];
   /** A finished Congress: every bill is on the map, at the place it ended. */
   final?: boolean;
   /** First and last year of a finished Congress. */

@@ -78,6 +78,10 @@ interface Trip {
   from: Site | null;
   to: Site;
   bills: string[];
+  /** Where a first journey sets out from, when it is not the world's usual starting place. */
+  origin?: Site;
+  /** The day it happened, for a replay that runs over many days. */
+  date?: string;
 }
 
 interface Walker {
@@ -530,8 +534,10 @@ export class WorldScene extends Phaser.Scene {
     }
     this.scene.sleep();
     if (chamber) {
-      this.scene.launch("interior", { place });
-      this.hooks.onPlace({ place, label: `the ${hall ? (site?.label ?? place) : place}`, note: "the comings and goings are animation" });
+      // A building of another world can stage one of its items: an argument in the Courtroom.
+      const staged = hall && meetingId ? (this.layout.staged?.(meetingId) ?? null) : null;
+      this.scene.launch("interior", { place, sitting: Boolean(staged) });
+      this.hooks.onPlace({ place, label: `the ${hall ? (site?.label ?? place) : place}`, note: staged ?? "the comings and goings are animation" });
       return;
     }
     const label = `the ${site?.label ?? "committee room"}`;
@@ -660,6 +666,11 @@ export class WorldScene extends Phaser.Scene {
     return this.lastDayEvents().length > 0;
   }
 
+  /** Whether the whole period can be replayed, not only its last day. */
+  get hasStory(): boolean {
+    return (this.world.story?.length ?? 0) > 0;
+  }
+
   get isReplaying(): boolean {
     return this.replaying;
   }
@@ -720,15 +731,17 @@ export class WorldScene extends Phaser.Scene {
         const trip: Trip = { actor, role: event.actor_role ?? "", from, to, bills: [event.bill] };
         shared.set(key, trip);
         trips.push(trip);
-      } else trips.push({ actor: null, role: "", from, to, bills: [event.bill] });
+      } else trips.push({ actor: null, role: "", from, to, bills: [event.bill], origin: event.via ? this.layout.sites.get(event.via) : undefined, date: event.date });
     }
     return trips;
   }
 
-  replay() {
+  /** Play the last day's movements again, or with `whole` every movement of the period, in the time it took. */
+  replay(whole = false) {
     this.leave();
     this.stopReplay();
-    const events = this.lastDayEvents();
+    const story = whole ? (this.world.story ?? []).filter((event) => this.bills.has(event.bill) && this.siteFor(event.to, event.bill)) : [];
+    const events = whole ? story : this.lastDayEvents();
     if (!events.length) return;
     this.replaying = true;
     const day = formatDay(events[0].date);
@@ -744,25 +757,36 @@ export class WorldScene extends Phaser.Scene {
     this.rebuildOccupancy();
 
     const trips = this.planTrips(events);
-    const span = Phaser.Math.Clamp(trips.length * 1100, 6000, 40000);
+    const span = whole ? Phaser.Math.Clamp(trips.length * 260, 25000, 100000) : Phaser.Math.Clamp(trips.length * 1100, 6000, 40000);
+    // Over a whole period the trips keep the rhythm of the calendar: a quiet month is quiet, a busy week is a rush.
+    const firstDay = Date.parse(`${events[0].date}T12:00:00Z`);
+    const days = Math.max(1, Date.parse(`${events[events.length - 1].date}T12:00:00Z`) - firstDay);
+    const dayStarts: [number, string][] = [];
     const billFree = new Map<string, number>();
     const actorFree = new Map<string, number>();
     let end = 0;
     trips.forEach((trip, index) => {
       const timing = this.tripTiming(trip);
+      const onCalendar = whole && trip.date ? ((Date.parse(`${trip.date}T12:00:00Z`) - firstDay) / days) * span : 0;
       const start = Math.max(
-        (index / trips.length) * span,
+        whole ? onCalendar : (index / trips.length) * span,
         ...trip.bills.map((bill) => billFree.get(bill) ?? 0),
         trip.actor ? (actorFree.get(trip.actor) ?? 0) : 0,
       );
       for (const bill of trip.bills) billFree.set(bill, start + timing.delivered + 200);
       if (trip.actor) actorFree.set(trip.actor, start + timing.total + 200);
       end = Math.max(end, start + timing.total);
+      if (whole && trip.date) dayStarts.push([onCalendar, trip.date]);
       this.timers.push(this.time.delayedCall(start, () => this.runTrip(trip)));
     });
     const total = end + 700;
+    const dated = (at: number) => {
+      let shown = events[0].date;
+      for (const [start, date] of dayStarts) if (start <= at) shown = date;
+      return new Date(`${shown}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    };
     for (let at = 0; at < total; at += 400) {
-      this.timers.push(this.time.delayedCall(at, () => this.hooks.onClock(day, at / total)));
+      this.timers.push(this.time.delayedCall(at, () => this.hooks.onClock(whole ? dated(at) : day, at / total)));
     }
     this.timers.push(this.time.delayedCall(total, () => this.skipReplay()));
   }
@@ -793,7 +817,8 @@ export class WorldScene extends Phaser.Scene {
     const chamber = bill.type.startsWith("S") ? "Senate" : "House";
     // A new item sets out from the world's starting place: the referral desk here, the White House next door.
     const desk = this.layout.sites.get(this.layout.origin ?? `referral_desk:${chamber}`)!;
-    if (!trip.from) return trip.to.style === "hopper" || trip.to.key === desk.key ? [] : [{ points: route(desk, trip.to), belt: false }];
+    const start = trip.origin ?? desk;
+    if (!trip.from) return trip.to.style === "hopper" || trip.to.key === start.key ? [] : [{ points: route(start, trip.to), belt: false }];
     const wing = trip.from.wing === "Senate" ? "Senate" : "House";
     const belt = this.layout.conveyors[wing];
     if (trip.from.style === "hopper" && belt) {
