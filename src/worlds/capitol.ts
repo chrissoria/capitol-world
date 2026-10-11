@@ -7,6 +7,7 @@ import type { WorldDef } from "./types";
 
 export const capitol: WorldDef = {
   key: "capitol",
+  place: () => "00",
   name: "Capitol World",
   periodParam: "congress",
   provider: null,

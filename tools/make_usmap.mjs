@@ -1,5 +1,6 @@
-// Turns the Census Bureau's state and county outlines into the grids of squares the maps are drawn
-// from: the whole country in src/usa/shapes.ts, and each state with its counties in public/usa/XX.json.
+// Turns the Census Bureau's state outlines into the grid of squares the map of the whole country is
+// drawn from, in src/usa/shapes.ts. The maps of each state and each county are not made here: they
+// come from the us-places dataset (build_boundaries.py in cat-pol-datasets).
 //
 // The outlines come from us-atlas (https://github.com/topojson/us-atlas, ISC licence), which
 // repackages the Census Bureau's public-domain cartographic boundary files already projected, with
@@ -11,7 +12,7 @@
 // The five territories are not in that file. They are small hand-drawn islands in a box of their
 // own, placed by the table below. State capitals are placed by their latitude and longitude.
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 // ── The whole country ────────────────────────────────────────────────────────
 const CELL = 3; // projected units to a square
@@ -21,9 +22,6 @@ const W = 362;
 const H = 214;
 const SUB = 4; // samples across a square
 const LAND = 5; // samples of 16 that make a square land
-// ── One state ────────────────────────────────────────────────────────────────
-const LONG = 150; // squares along a state's longer side
-const MARGIN = 5; // squares of sea round it
 
 const FIPS = {
   "01": "AL", "02": "AK", "04": "AZ", "05": "AR", "06": "CA", "08": "CO", "09": "CT", "10": "DE", "11": "DC", "12": "FL",
@@ -280,49 +278,3 @@ export function stateGrid(): Uint8Array {
 `,
 );
 console.log(`country: ${W}×${H} squares, ${runs.length} characters; smallest:`, [...counts.entries()].sort((a, b) => a[1] - b[1]).slice(0, 8).map(([c, n]) => `${c} ${n}`).join(", "));
-
-// ── Each state, with its counties ────────────────────────────────────────────
-const out = new URL("../public/usa/", import.meta.url);
-mkdirSync(out, { recursive: true });
-let bytes = 0;
-let lone = 0;
-for (const [fips, code] of Object.entries(FIPS)) {
-  if (code === "DC") continue; // one county, and its own way in
-  const counties = topo.objects.counties.geometries.filter((county) => county.id.startsWith(fips)).sort((a, b) => a.id.localeCompare(b.id));
-  const shapes = counties.map(edgesOf);
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const edges of shapes) {
-    for (const [[x, y]] of edges) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  const cell = Math.max(maxX - minX, maxY - minY) / LONG;
-  const w = Math.ceil((maxX - minX) / cell) + MARGIN * 2;
-  const h = Math.ceil((maxY - minY) / cell) + MARGIN * 2;
-  const x0 = minX - MARGIN * cell;
-  const y0 = minY - MARGIN * cell;
-  const stateGrid = rasterize(shapes, x0, y0, cell, w, h);
-  const squares = new Map();
-  for (const county of stateGrid) if (county) squares.set(county, (squares.get(county) ?? 0) + 1);
-  lone += counties.filter((_, n) => (squares.get(n + 1) ?? 0) <= 1).length;
-  if (squares.size !== counties.length) throw new Error(`${code}: ${counties.length - squares.size} counties have no square`);
-  const [cx, cy] = project(code, CAPITALS[code]);
-  const file = JSON.stringify({
-    code,
-    w,
-    h,
-    capital: [round((cx - x0) / cell), round((cy - y0) / cell)],
-    ids: counties.map((county) => county.id),
-    names: counties.map((county) => county.properties.name),
-    runs: runsOf(stateGrid),
-  });
-  bytes += file.length;
-  writeFileSync(new URL(`${code}.json`, out), file);
-}
-console.log(`states: 50 files, ${Math.round(bytes / 1024)} KB in all; ${lone} counties are a single square`);

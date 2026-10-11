@@ -138,6 +138,8 @@ export interface WorldDef {
   /** Whether the overview lists items by their area (a department, say) rather than by where they are. */
   /** What the whiteboard can plot, and how the Stats tab words its counts, when they differ from the Capitol's. */
   board?: BoardConfig;
+  /** The place the world is about, as the us-places dataset knows it: "00" for the country, "06" for California, a county's or a city's Census code. */
+  place?(): string | null;
   stats?: StatsWords;
   /** The names the Stats tab uses for a legislature that is not Congress. */
   statsNames?: StatsNames;

@@ -8,7 +8,7 @@ import { el, put } from "../ui/dom";
 import { WORLDS } from "../worlds";
 import type { ChamberEntry } from "../worlds/chamber";
 import type { Destination, WorldKey } from "../worlds/types";
-import { isUnincorporated, type CountyFile, type StateFile } from "./sheet";
+import { isCity, isUnincorporated, type CountyFile, type DistrictFile, type StateFile } from "./sheet";
 import { COUNTY_WORLDS, STATE, STATES, countyName, countyWords, hasCities, hasCounties, type StateInfo } from "./states";
 
 export interface AtlasActions {
@@ -20,6 +20,10 @@ export interface AtlasActions {
   county(fips: string | null): void;
   /** Pick a city on the county map that is open (null for none). */
   city(id: string | null): void;
+  /** Pick a congressional district on the state map that is open (null for none). */
+  district(id: string | null): void;
+  /** Cut the state's map into its counties, or into its congressional districts. */
+  layer(next: "counties" | "congress"): void;
   /** Back from a county's map to its state's. */
   leaveCounty(): void;
   /** Go to a place's capital: into its world if it has one. */
@@ -81,6 +85,22 @@ export function createAtlasPanel(actions: AtlasActions) {
     button.addEventListener("click", go);
     return el("li", {}, button);
   };
+
+  /** The two ways a state's map is cut, with the one on show pressed. */
+  function layerSwitch(current: "counties" | "congress", place: StateInfo) {
+    const button = (layer: "counties" | "congress", label: string) => {
+      const made = el("button", { type: "button", class: layer === current ? "on" : "", "aria-pressed": String(layer === current) }, label);
+      made.addEventListener("click", () => actions.layer(layer));
+      return made;
+    };
+    const many = countyWords(place.code)[1].split(" ")[0];
+    return el("div", { class: "switch", role: "group", "aria-label": "What the map shows" }, button("counties", many.replace(/^./, (first) => first.toUpperCase())), button("congress", "Congressional districts"));
+  }
+  const dollars = (value: number | null | undefined) => (value == null ? "" : `$${value.toLocaleString()}`);
+  /** Who sits for a district: the member whose district has its number, or the one member of a state with one. */
+  const sitting = (place: StateInfo, short: string) =>
+    delegation.get(place.code)?.house.find((member) => (short === "At Large" ? !member.district : member.district === Number(short)));
+  const districtTitle = (short: string) => (short === "At Large" ? "At large" : `${ordinal(Number(short))} district`);
 
   function memberRow(member: Member, place: StateInfo) {
     const seat =
@@ -200,12 +220,55 @@ export function createAtlasPanel(actions: AtlasActions) {
         back("United States", actions.home),
         el("div", { class: "kicker" }, KIND[place.kind]),
         el("h2", {}, place.name),
+        layerSwitch("counties", place),
         el("p", { class: "note" }, `Click one of its ${many} on the map, or the star on ${place.capital}.${hasCities(place) ? ` Each ${countyWords(place.code)[0]} opens to a map of its cities. A gold triangle is a county board you can walk in on.` : ""}`),
         el("p", {}, capital),
         facts(place, [fact(many.replace(/^./, (first) => first.toUpperCase()), String(file.ids.length))]),
         ...people(place),
         el("h3", {}, `${file.ids.length} ${many}`),
         el("ul", { class: "list" }, ...counties),
+      );
+    },
+
+    /** A state cut into its congressional districts: who sits for each. */
+    districts(place: StateInfo, file: DistrictFile) {
+      const rows = file.ids.map((id, n) => {
+        const member = sitting(place, file.short[n]);
+        return row(districtTitle(file.short[n]), member ? `${member.name} · ${partyName(member.party)}` : known ? "No one sitting" : "", () => actions.district(id));
+      });
+      show(
+        back("United States", actions.home),
+        el("div", { class: "kicker" }, KIND[place.kind]),
+        el("h2", {}, place.name),
+        layerSwitch("congress", place),
+        el("p", { class: "note" }, `${place.name} cut into the ${count(file.ids.length, "district")} it sends ${file.ids.length === 1 ? "a member" : "members"} to the House from, as drawn for the ${file.session}. Click one on the map.`),
+        facts(place, [fact("Congressional districts", String(file.ids.length))]),
+        el("h3", {}, count(file.ids.length, "congressional district")),
+        el("ul", { class: "list" }, ...rows),
+      );
+    },
+
+    /** One congressional district of the state whose map is open. */
+    district(place: StateInfo, file: DistrictFile, id: string) {
+      const at = file.ids.indexOf(id);
+      const member = sitting(place, file.short[at] ?? "");
+      show(
+        back(`${place.name}’s districts`, () => actions.district(null)),
+        el("div", { class: "kicker" }, "Congressional district"),
+        el("h2", {}, file.names[at] ?? ""),
+        member ? el("ul", { class: "list" }, memberRow(member, place)) : el("p", { class: "note" }, known ? "No one is sitting for this district now." : "The list of members has not loaded."),
+        member ? el("p", { class: "note" }, "Pick the member to find them in Capitol World.") : null,
+        el(
+          "dl",
+          { class: "facts" },
+          fact("State", place.name),
+          fact("People", file.people[at]?.toLocaleString() ?? ""),
+          fact("Median household income", dollars(file.income[at])),
+          fact("Median home value", dollars(file.home[at])),
+          fact("Lines drawn for", `the ${file.session}`),
+          fact("Census code", id),
+        ),
+        el("p", { class: "note" }, "People, income and home value are the Census Bureau’s survey figures for 2020 to 2024, counted on these lines."),
       );
     },
 
@@ -231,9 +294,13 @@ export function createAtlasPanel(actions: AtlasActions) {
     countyMap(place: StateInfo, file: CountyFile) {
       const county = countyName(file.code, file.name);
       const cities = file.ids
-        .map((id, n) => ({ id, name: file.names[n], kind: file.kinds[n] }))
-        .filter((city) => !isUnincorporated(city.id))
+        .map((id, n) => ({ id, name: file.names[n], city: isCity(file, n) }))
+        .filter((city) => city.city)
         .map((city) => row(city.name, city.id === file.seat?.place ? "County seat" : "", () => actions.city(city.id), chambers[city.id] ? "●" : ""));
+      const communities = file.ids
+        .map((id, n) => ({ id, name: file.names[n], community: file.kinds[n] === "community" }))
+        .filter((place) => place.community)
+        .map((place) => row(place.name, "", () => actions.city(place.id)));
       const open = file.ids.find(isUnincorporated);
       show(
         back(place.name, actions.leaveCounty),
@@ -243,7 +310,10 @@ export function createAtlasPanel(actions: AtlasActions) {
         el("p", { class: "note" }, `The triangle is where the county’s government sits${file.seat ? `, in ${file.seat.name}` : ""}. Each dot is a city hall.`),
         el("dl", { class: "facts" }, fact("State", place.name), fact("County seat", file.seat?.name ?? ""), fact("Cities and towns", String(cities.length)), fact("Census code", file.code)),
         cities.length ? el("h3", {}, count(cities.length, "city or town", "cities and towns")) : null,
-        el("ul", { class: "list" }, ...cities, ...(open ? [row("Unincorporated land", "Governed by the county itself", () => actions.city(open))] : [])),
+        el("ul", { class: "list" }, ...cities),
+        communities.length ? el("h3", {}, count(communities.length, "unincorporated community", "unincorporated communities")) : null,
+        communities.length ? el("p", { class: "note" }, "Settled places with a name and no government of their own. The county governs them.") : null,
+        el("ul", { class: "list" }, ...communities, ...(open ? [row(communities.length ? "The rest of the unincorporated land" : "Unincorporated land", "Governed by the county itself", () => actions.city(open))] : [])),
       );
     },
 
@@ -259,6 +329,16 @@ export function createAtlasPanel(actions: AtlasActions) {
           el("p", {}, `Land that belongs to no city. The county’s own board is its local government: it does here what a city council does inside a city.`),
           chamberDoor(file.code),
           el("dl", { class: "facts" }, fact("County", county.name), fact("State", place.name)),
+        );
+      }
+      if (file.kinds[at] === "community") {
+        return show(
+          back(county.name, () => actions.city(null)),
+          el("div", { class: "kicker" }, "Unincorporated community"),
+          el("h2", {}, file.names[at] ?? ""),
+          el("p", {}, `A settled place with a name and no government of its own. The county’s board is its local government: it does here what a city council does inside a city.`),
+          chamberDoor(file.code),
+          el("dl", { class: "facts" }, fact("County", county.name), fact("State", place.name), fact("Census code", id)),
         );
       }
       const kind = file.kinds[at] || "city";

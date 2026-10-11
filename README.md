@@ -127,9 +127,11 @@ where it has one. They are drawn in `src/world/flags.ts`: a state's flag,
 once added there, flies in every room of that state, and a state not drawn
 yet flies a plain placeholder.
 
-A new body is data and a line, with no code: publish its
-`world/chamber.json.gz` (`build_chamber_snapshot.py` in cat-pol-datasets) and
-add its Census code to `public/usa/chambers.json`. `docs/local_worlds.md` has
+A new body is data and an entry, with no code: add it to `bodies.json` in
+cat-pol-datasets, publish its `world/chamber.json.gz`
+(`build_chamber_snapshot.py`) and run `build_places.py`, which writes the
+list of bodies the app reads from the
+[us-places](https://huggingface.co/datasets/chrissoria/us-places) dataset. `docs/local_worlds.md` has
 the plan and what is built.
 
 ## The map of the United States
@@ -139,12 +141,14 @@ on the lawn left of the White House leads out to it. It is not a world: nothing
 on it moves, and it has no data of its own beyond who each place sends to
 Congress, which it reads from Capitol World's file.
 
-- Click a state to open that state's own map, with its counties; click a
-  county for its card. A county's name shows beside the pointer.
-- In California a county opens to a map of its own, with its cities
-  (`tools/make_counties.mjs` makes them from the Census Bureau's boundary
-  files). A triangle is where the county's government sits and a dot is a
-  city hall; a gold one leads into that body's room.
+- Click a state to open that state's own map, with its counties. A county's
+  name shows beside the pointer.
+- A county opens to a map of its own, with its cities and its named
+  unincorporated communities. A triangle is where the county's government
+  sits and a dot is a city hall; a gold one leads into that body's room.
+- A state's map can be switched from its counties to its congressional
+  districts, each with who sits for it, its people, income and home value.
+  The choice holds from state to state.
 - A star marks each capital. A gold one leads straight into a world: so far
   Washington's, into Capitol World, and Sacramento's, into California Capitol
   World. A white one opens the capital's card, which says its world is not
@@ -153,20 +157,30 @@ Congress, which it reads from Capitol World's file.
   opens their card.
 - The address can name a state (`#state=CA`), a county by its Census code
   (`#county=06037`), a city by its county and its own code
-  (`#city=06073.0666000`) or a capital (`#capital=CA`).
+  (`#city=06073.0666000`), a capital (`#capital=CA`), or a state's
+  congressional districts (`#congress=CA`, and `#congress=CA.0652` for one).
 
 To give a state capitol or a county a world, build the world as the others are
 built and name it in `src/usa/states.ts`: in the state's `world`, or in
 `COUNTY_WORLDS`.
 
-The shapes come from the Census Bureau's cartographic boundary files, by way of
-[us-atlas](https://github.com/topojson/us-atlas) (ISC licence), turned into
-grids of squares by `tools/make_usmap.mjs`: the country in
-`src/usa/shapes.ts`, and each state in `public/usa/<code>.json`, fetched when
-the state is opened. The outlines are from before 2019, so Connecticut has its
-eight counties rather than the planning regions that replaced them, and
-Alaska's Valdez-Cordova census area, since divided in two, is whole. The
+The shapes are the Census Bureau's cartographic boundary files, turned into
+grids of squares. The maps of each state and of each county are not in the
+app: `build_boundaries.py` in cat-pol-datasets makes them from the Bureau's
+2024 outlines and keeps them in the
+[us-places](https://huggingface.co/datasets/chrissoria/us-places) dataset,
+with every other fact about a place, and the app fetches one when it is
+opened. Only the map of the whole country is in the app, in
+`src/usa/shapes.ts`, made by `tools/make_usmap.mjs` from
+[us-atlas](https://github.com/topojson/us-atlas) (ISC licence). That one's
+outlines are from before 2019; the states' and counties' are current, so
+Connecticut has its planning regions and Alaska its newer census areas. The
 territories are hand-drawn islands in a box, not to scale or in place.
+
+The Stats tab of Capitol World, California and each board's or council's room
+ends with the place itself: its people, their ages, income, home values and
+the last vote for president, from the same dataset (`src/data/places.ts`).
+Each figure draws on the whiteboard beside the places it is part of.
 
 ## Data
 
@@ -210,7 +224,7 @@ Add `?data=live` or `?data=bundled` to the URL to choose the data source.
 
 - `src/worlds/` one definition per world (Capitol Hill, the White House, the Supreme Court, California's Capitol) and the shape they share
 - `src/usa/` the map of the United States and of each state: places, grids, drawing, scene and panel
-- `tools/make_usmap.mjs` builds those grids from the Census outlines
+- `tools/make_usmap.mjs` builds the country's grid from the Census outlines; the states' and counties' come from the us-places dataset
 - `src/data/` snapshot types and loading
 - `src/world/layout.ts` the map: sites, streets and routes
 - `src/world/era.ts` the signs of the times drawn on the lawns of each Congress

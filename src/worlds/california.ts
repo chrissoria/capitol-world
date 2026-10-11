@@ -158,6 +158,7 @@ const NOTES: Record<string, (site: Site) => Note> = {
 
 export const california: WorldDef = {
   key: "california",
+  place: () => "06",
   name: "California Capitol World",
   periodParam: "session",
   provider: null,

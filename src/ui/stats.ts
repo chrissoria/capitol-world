@@ -1,8 +1,11 @@
 // The Stats tab: how many measures were introduced in a period, by whom, and how
 // far those same measures have got. Everything is counted in the browser from
 // the search indexes, one per Congress, so any run of Congresses can be combined.
+// Under that is the place the world is about: its people, their ages, what they
+// earn and how they voted, from the us-places dataset (../data/places.ts).
 
 import { archived, loadCongressLine, loadSearchOf, type CongressEntry } from "../data/load";
+import { loadPlace, loadStates, placeCharts, placeFigures, NATION, type PlaceChart } from "../data/places";
 import { ordinal, type SearchIndex, type World } from "../data/types";
 import { add, el, niceDate, put } from "./dom";
 import type { BoardSpec, Whiteboard } from "./whiteboard";
@@ -156,7 +159,7 @@ function toRows(data: SearchIndex, congress: number, names: StatsNames): Row[] {
   });
 }
 
-export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void, board: Whiteboard, cfg?: StatsWords, names: StatsNames = CONGRESS) {
+export function createStats(section: HTMLElement, world: World, pickMember: (id: string) => void, board: Whiteboard, cfg?: StatsWords, names: StatsNames = CONGRESS, place: string | null = null) {
   const nameOf = (entry: CongressEntry) => cfg?.periodLabel(entry) ?? names.periodLabel(entry);
   const Periods = names.periods[0].toUpperCase() + names.periods.slice(1);
   const members = new Map(world.members.map((member) => [member.id, member]));
@@ -189,6 +192,40 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
     ...(cfg ? [] : [el("label", { for: "s-kind" }, "Kind of measure"), kind, el("label", { for: "s-chamber" }, "Started in"), chamber]),
     body,
   );
+  // The place the world is about, under the counts: filled in when its figures arrive.
+  const about = el("div", { class: "place-facts" });
+  section.append(about);
+
+  /** List the place's figures, each a button that draws its chart, and hand the charts to the whiteboard. */
+  async function showPlace(id: string) {
+    const [chain, states] = await Promise.all([loadPlace(id), id === NATION ? loadStates() : Promise.resolve([])]);
+    if (!section.isConnected) return;
+    const charts = placeCharts(chain, states);
+    board.setPlace(charts, chain[0].name);
+    const draws = (node: HTMLElement, key?: PlaceChart["key"]) => {
+      if (!key || !charts.some((chart) => chart.key === key)) return node;
+      node.classList.add("pick");
+      node.tabIndex = 0;
+      node.setAttribute("role", "button");
+      node.title = "Draw this on the whiteboard";
+      const go = () => board.openPlace(key);
+      node.addEventListener("click", go);
+      node.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        go();
+      });
+      return node;
+    };
+    const within = chain.slice(1).map((entry) => entry.name).join(", ");
+    put(
+      about,
+      el("h3", {}, `The place: ${chain[0].name}`),
+      el("p", { class: "note" }, `What is known of ${chain[0].name} as a whole${within ? `, in ${within}` : ""}. Pick a figure to draw it on the whiteboard${chain.length > 1 ? ", beside the places it is part of" : ""}.`),
+      el("ul", { class: "list" }, ...placeFigures(chain).map((figure) => draws(el("li", {}, el("div", { class: "bar-row" }, el("span", {}, figure.label), el("span", { class: "count" }, figure.value))), figure.chart))),
+      el("p", { class: "note" }, "From the Census Bureau and other public sources, gathered in the us-places dataset."),
+    );
+  }
 
   let rows: Row[] = [];
   let chosenLine: CongressEntry[] = [];
@@ -493,6 +530,7 @@ export function createStats(section: HTMLElement, world: World, pickMember: (id:
       if (opened) return;
       opened = true;
       void load();
+      if (place) showPlace(place).catch((error) => console.error(error));
       void loadCongressLine().then((entries) => {
         if (entries.length < 2 || !section.isConnected) return;
         line = entries;

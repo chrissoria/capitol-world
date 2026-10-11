@@ -3,8 +3,9 @@
 // everything else is the side panel.
 //
 // Which body is in the address (`?world=chamber&place=06073`, a Census code). What it is called and
-// where its file is come from public/usa/chambers.json, so a new body is a line there and its data
-// (build_chamber_snapshot.py in cat-pol-datasets writes the file). No code.
+// where its file is come from the list of bodies in the us-places dataset (bodies.json in
+// cat-pol-datasets), so a new body is an entry there and its data (build_chamber_snapshot.py writes
+// the file). No code.
 
 import { fetchJson, type CongressEntry, type DataProvider } from "../data/load";
 import type { CommitteeFile, CommitteeMeeting } from "../data/meetings";
@@ -14,7 +15,7 @@ import { wallFlags } from "../world/flags";
 import { makeSite, streets, type Layout, type Site } from "../world/layout";
 import type { WorldDef } from "./types";
 
-/** One body in public/usa/chambers.json, under its place's Census code. */
+/** One body with a room, under its place's Census code. */
 export interface ChamberEntry {
   /** "San Diego County Board of Supervisors", and the body alone: "Board of Supervisors", "the Board". */
   name: string;
@@ -35,8 +36,6 @@ export interface ChamberEntry {
   timezone: string;
   /** How far back the record goes, in words: "June 2017". */
   since: string;
-  /** Family names of more than one word, by the member's id: "Montgomery Steppe". */
-  surnames?: Record<string, string>;
   /** Where it is on the map of the United States, as that page's address has it: "#county=06073". */
   map?: string;
 }
@@ -47,7 +46,7 @@ interface ChamberFile {
   generated_at: string;
   data_through: string;
   vote_letters: Record<string, string>;
-  members: { id: string; name: string; seat: number | null; role: string; start: string; end: string; serving: boolean; first_vote: string; last_vote: string; votes: number }[];
+  members: { id: string; name: string; surname?: string; seat: number | null; role: string; start: string; end: string; serving: boolean; first_vote: string; last_vote: string; votes: number }[];
   kinds: string[];
   statuses: string[];
   bodies: string[];
@@ -73,8 +72,36 @@ export function placeInAddress(): string | null {
   return place && /^\d{5,7}$/.test(place) ? place : null;
 }
 
+/** The bodies with records, as the us-places dataset lists them (build_places.py in cat-pol-datasets). */
+const BODIES = "https://huggingface.co/datasets/chrissoria/us-places/resolve/main/world/bodies.json";
+interface BodiesFile {
+  schema: number;
+  bodies: {
+    body_id: string; place_id: string; place: string; name: string; body: string; short?: string; room?: string; member_title?: string; seat_title?: string;
+    timezone?: string; site?: string; site_url?: string; since?: string; world?: string; chamber_file?: string; map?: string;
+  }[];
+}
+
 let registry: Promise<Record<string, ChamberEntry>> | undefined;
-const loadRegistry = () => (registry ??= fetchJson<Record<string, ChamberEntry>>(`${import.meta.env.BASE_URL}usa/chambers.json`));
+/** The boards and councils that have a room, by the Census code of the place each governs. */
+function loadRegistry(): Promise<Record<string, ChamberEntry>> {
+  if (registry) return registry;
+  const asked = fetchJson<BodiesFile>(BODIES).then((file) => {
+    if (file.schema !== 1 || !Array.isArray(file.bodies)) throw new Error("the list of bodies is not in the expected format");
+    const rooms: Record<string, ChamberEntry> = {};
+    for (const body of file.bodies) {
+      if (body.world !== "chamber" || !body.chamber_file) continue;
+      rooms[body.place_id] = {
+        name: body.name, body: body.body, short: body.short ?? body.body, place: body.place, room: body.room ?? "Chamber",
+        member: body.member_title ?? "Member", seat: body.seat_title ?? "District", file: body.chamber_file, site: body.site ?? "its own site",
+        url: body.site_url ?? "", timezone: body.timezone ?? "America/Los_Angeles", since: body.since ?? "", map: body.map,
+      };
+    }
+    return rooms;
+  });
+  asked.catch(() => (registry = undefined)); // a list that did not arrive is asked for again next time
+  return (registry = asked);
+}
 /** Where the way out of the chamber on show leads, on the map of the United States. */
 export const chamberWayOut = () => entry.map ?? "";
 
@@ -86,6 +113,8 @@ let entry: ChamberEntry = {
   name: "Council Chamber", body: "Council", short: "the council", place: "", room: "Chamber", member: "Member", seat: "District",
   file: "", site: "its own site", url: "", timezone: "America/Los_Angeles", since: "",
 };
+/** Each member's family name, by their name. The file gives it, since one of more than one word cannot be told from the name. */
+let surnames = new Map<string, string>();
 const files = new Map<string, Promise<{ entry: ChamberEntry; data: ChamberFile }>>();
 
 function load(): Promise<{ entry: ChamberEntry; data: ChamberFile }> {
@@ -104,6 +133,7 @@ function load(): Promise<{ entry: ChamberEntry; data: ChamberFile }> {
   }
   return file.then((loaded) => {
     entry = loaded.entry;
+    surnames = new Map(loaded.data.members.map((member) => [member.name, member.surname ?? ""]));
     chamber.name = loaded.entry.name;
     return loaded;
   });
@@ -119,7 +149,7 @@ function nice(text: string): string {
 }
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const day = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
-const lastName = (name: string) => entry.surnames?.[name.toLowerCase().replace(/[^a-z0-9]+/g, "-")] ?? name.split(" ").slice(-1)[0];
+const lastName = (name: string) => surnames.get(name) || name.split(" ").slice(-1)[0];
 const tally = (ayes: number, noes: number) => (ayes || noes ? `${ayes}–${noes}` : "");
 
 /** The places an item can be. Only the first is in the room; the rest are how the others came out. */
@@ -387,6 +417,7 @@ function layout(): Layout {
 
 export const chamber: WorldDef = {
   key: "chamber",
+  place: () => placeInAddress(),
   name: "Council Chamber",
   periodParam: "session",
   provider,

@@ -5,11 +5,14 @@ were built on 2026-10-11, with San Diego County as the first body:
 
 - `build_chamber_snapshot.py` (cat-pol-datasets) writes `world/chamber.json.gz`
   beside a body's dataset, and `build_sd_county.py` runs it after publishing.
-- `src/worlds/chamber.ts` is the one-room world, `buildCouncilRoom` its room,
-  and `public/usa/chambers.json` the registry. The address is
-  `?world=chamber&place=06073`.
-- `tools/make_counties.mjs` writes a map of each county's cities from the
-  Census Bureau's boundary files; California's 58 are in `public/usa/CA/`.
+- `src/worlds/chamber.ts` is the one-room world and `buildCouncilRoom` its
+  room. The registry is `world/bodies.json` in the us-places dataset, which
+  `build_places.py` writes from `bodies.json` (both in cat-pol-datasets). The
+  address is `?world=chamber&place=06073`.
+- `build_boundaries.py` (cat-pol-datasets) writes a map of each county's
+  cities and communities from the Census Bureau's boundary files, for every
+  county in the country, into the us-places dataset. The app fetches a
+  state's counties together when one of them is opened.
   A click on a California county opens its map; the address is
   `?world=usa#county=06073`, or `#city=06073.0666000` for one city on it.
 
@@ -24,10 +27,9 @@ The San Diego City Council was added the same day, from the City Clerk's
 agenda site (`build_sd_council.py`), as the second body and the first city:
 `?world=chamber&place=0666000`.
 
-To add a body: publish its `world/chamber.json.gz`, and add its Census code
-to `public/usa/chambers.json`. To add a state's county maps: run
-`tools/make_counties.mjs` for it, give it a table of county seats there, and
-add its code to `CITY_MAPS` in `src/usa/states.ts`.
+To add a body: add it to `bodies.json` in cat-pol-datasets, publish its
+`world/chamber.json.gz`, and run `build_places.py`. Every state's county
+maps are already made.
 
 ## The map: country, state, county, city
 
@@ -98,10 +100,11 @@ What this needs:
   called ("Supervisor"), what a seat is called ("District 3"), and where the
   file is. The scene starts in the room instead of on a map.
 - **A registry instead of a list in the code.** There are thousands of local
-  governments, so they cannot each be a `WorldKey`. One file,
-  `public/usa/chambers.json`, maps a county's or city's Census code to its
-  definition, and the address is `?world=chamber&place=06073`. Adding a body is
-  then a line in that file and its data. No code.
+  governments, so they cannot each be a `WorldKey`. One list of bodies, kept
+  with the datasets and published in us-places, maps a county's or city's
+  Census code to its definition, and the address is
+  `?world=chamber&place=06073`. Adding a body is then an entry in that list
+  and its data. No code.
 
 ## The data, for more than one county
 

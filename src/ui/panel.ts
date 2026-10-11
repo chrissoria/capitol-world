@@ -809,7 +809,7 @@ export function createPanel(world: World, actions: PanelActions, def: WorldDef) 
   );
   summary.textContent = "Nothing is filtered.";
 
-  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats, def.statsNames);
+  const stats = createStats(sections.stats, world, (id) => actions.select({ type: "member", id }), board, def.stats, def.statsNames, def.place?.() ?? null);
 
   const roster = createRoster(sections.roster, world, actions.whereIs, (id) => actions.select({ type: "member", id }), capitol ? undefined : { title: def.tabs.rosterLabel ?? "People", items: def.tabs.rosterItems ?? words.items, note: def.tabs.rosterNote }, leg?.chambers, def.tabs.seatWord);
 

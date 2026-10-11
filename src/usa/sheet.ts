@@ -1,6 +1,7 @@
 // A sheet is one map made of squares: the whole country, where each shape is a state, or one state,
 // where each shape is a county. Both are drawn, pointed at and clicked the same way.
 
+import { fetchJson } from "../data/load";
 import { CODES, GRID_H, GRID_W, stateGrid } from "./shapes";
 
 export interface Shape {
@@ -154,7 +155,13 @@ export function nationSheet(): Sheet {
   return nation;
 }
 
-/** One state's file, written by tools/make_usmap.mjs. */
+/**
+ * The maps of the states and their counties are not in the app. They are made from the Census Bureau's outlines by
+ * build_boundaries.py in cat-pol-datasets and kept with the us-places dataset, where every other fact about a place is.
+ */
+const MAPS = "https://huggingface.co/datasets/chrissoria/us-places/resolve/main/maps/";
+
+/** One state's file: maps/states/CA.json. */
 export interface StateFile {
   code: string;
   w: number;
@@ -168,14 +175,38 @@ export interface StateFile {
   runs: number[];
 }
 
-/** One county's file, written by tools/make_counties.mjs: its cities as shapes, and the land in no city as one more. */
+/** A state cut into its congressional districts, on the same grid as its counties: maps/congress/CA.json. */
+export interface DistrictFile extends StateFile {
+  /** What the lines were drawn for: "119th Congress". */
+  session: string;
+  /** Each district's number alone ("52", "At Large"), and its people, median household income and median home value. */
+  short: string[];
+  people: (number | null)[];
+  income: (number | null)[];
+  home: (number | null)[];
+}
+
+const districtFiles = new Map<string, Promise<DistrictFile>>();
+
+/** A state's congressional districts, fetched the first time they are asked for. */
+export function loadDistricts(code: string): Promise<DistrictFile> {
+  let file = districtFiles.get(code);
+  if (!file) {
+    file = fetchJson<DistrictFile>(`${MAPS}congress/${code}.json`);
+    file.catch(() => districtFiles.delete(code));
+    districtFiles.set(code, file);
+  }
+  return file;
+}
+
+/** One county's map: its cities and its named communities as shapes, and the land in neither as one more. */
 export interface CountyFile {
   /** The county's five-digit Census code, and its name as the Census has it: "San Diego". */
   code: string;
   name: string;
   w: number;
   h: number;
-  /** The cities' Census place codes, names and kinds ("city", "town"), in the order the grid numbers them from 1. The land in no city, if there is any, comes last as "<county>-u". */
+  /** The places' Census codes, names and kinds ("city", "town", or "community" for one with no government), in the order the grid numbers them from 1. The land in none of them, if there is any, comes last as "<county>-u". */
   ids: string[];
   names: string[];
   kinds: string[];
@@ -184,23 +215,31 @@ export interface CountyFile {
   runs: number[];
 }
 
-/** Whether a shape on a county's map is the land in no city. */
+/** Whether a shape on a county's map is the land in no city and no named community. */
 export const isUnincorporated = (id: string) => id.endsWith("-u");
+/** Whether the nth shape on a county's map is a city or town, with a government of its own. */
+export const isCity = (file: CountyFile, n: number) => !isUnincorporated(file.ids[n]) && file.kinds[n] !== "community";
 
-const countyFiles = new Map<string, Promise<CountyFile>>();
+/** maps/counties/CA.json.gz: every county of one state. */
+interface CountyPack {
+  schema: number;
+  counties: Record<string, CountyFile>;
+}
+const countyPacks = new Map<string, Promise<CountyPack>>();
 
-/** A county's cities, fetched the first time the county is opened. `state` is the state's postal code. */
+/** A county's map. Those of a whole state come together, the first time one of its counties is opened. `state` is the state's postal code. */
 export function loadCounty(state: string, fips: string): Promise<CountyFile> {
-  let file = countyFiles.get(fips);
-  if (!file) {
-    file = fetch(`${import.meta.env.BASE_URL}usa/${state}/${fips}.json`).then((response) => {
-      if (!response.ok) throw new Error(`${response.status} for the map of county ${fips}`);
-      return response.json() as Promise<CountyFile>;
-    });
-    file.catch(() => countyFiles.delete(fips));
-    countyFiles.set(fips, file);
+  let pack = countyPacks.get(state);
+  if (!pack) {
+    pack = fetchJson<CountyPack>(`${MAPS}counties/${state}.json.gz`);
+    pack.catch(() => countyPacks.delete(state));
+    countyPacks.set(state, pack);
   }
-  return file;
+  return pack.then((loaded) => {
+    const file = loaded.counties?.[fips];
+    if (!file) throw new Error(`no map of county ${fips}`);
+    return file;
+  });
 }
 
 export function stateSheet(file: Pick<StateFile, "code" | "w" | "h" | "ids" | "runs">): Sheet {
@@ -219,10 +258,7 @@ const files = new Map<string, Promise<StateFile>>();
 export function loadState(code: string): Promise<StateFile> {
   let file = files.get(code);
   if (!file) {
-    file = fetch(`${import.meta.env.BASE_URL}usa/${code}.json`).then((response) => {
-      if (!response.ok) throw new Error(`${response.status} for the map of ${code}`);
-      return response.json() as Promise<StateFile>;
-    });
+    file = fetchJson<StateFile>(`${MAPS}states/${code}.json`);
     file.catch(() => files.delete(code)); // so a failed load can be tried again
     files.set(code, file);
   }

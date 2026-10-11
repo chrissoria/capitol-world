@@ -3,8 +3,10 @@
 // (`#state=CA`), a county (`#county=06037`), a city (`#city=06073.0666000`, the county and then the
 // place) or a capital (`#capital=CA`).
 //
-// A click on a state opens that state's own map, with its counties. Where the counties have maps of
-// their own (California's do), a click on a county opens it, with its cities. A star is a capitol, a
+// A click on a state opens that state's own map, with its counties, and a click on a county opens
+// the county's, with its cities and named communities. A state's map can be switched from its
+// counties to its congressional districts (`#congress=CA`, or `#congress=CA.0652` for one of them),
+// and stays that way from state to state. A star is a capitol, a
 // triangle is where a county's government sits, and a dot is a city hall; a gold one leads straight
 // into the world or the chamber behind it.
 
@@ -17,7 +19,7 @@ import { nationExtras } from "./art";
 import { createAtlasPanel } from "./panel";
 import { startAtlas, type Hit, type SheetView } from "./scene";
 import { CAPITALS, TERRITORY_BOX } from "./shapes";
-import { isUnincorporated, loadCounty, loadState, nationSheet, stateSheet, type CountyFile, type StateFile } from "./sheet";
+import { isCity, isUnincorporated, loadCounty, loadDistricts, loadState, nationSheet, stateSheet, type CountyFile, type DistrictFile, type StateFile } from "./sheet";
 import { STATE, STATES, countyName, countyWords, hasCities, hasCounties, stateOfCounty, type StateInfo } from "./states";
 
 export const ATLAS_NAME = "United States";
@@ -32,7 +34,11 @@ export interface AtlasContext {
 }
 
 /** What the visitor has picked on the map that is open. */
-type Picked = { kind: "place"; code: string } | { kind: "county"; fips: string } | { kind: "capital" } | { kind: "city"; id: string } | null;
+type Picked = { kind: "place"; code: string } | { kind: "county"; fips: string } | { kind: "capital" } | { kind: "city"; id: string } | { kind: "district"; id: string } | null;
+/** What a state's map is cut into. */
+export type Layer = "counties" | "congress";
+/** The end of a district's Census code, which is how the address names it: "0652". */
+const districtTail = (id: string) => id.slice(id.indexOf("US") + 2);
 
 const capitalLine = (place: StateInfo) => (place.code === "DC" ? "Washington, D.C." : `${place.capital}, capital of ${place.name}`);
 
@@ -75,12 +81,26 @@ function stateView(place: StateInfo, file: StateFile, chambers: Record<string, C
   };
 }
 
-/** A county's own map: each city a shape with its name on it where there is room, a dot on each city hall, a triangle on the county's seat. */
+/** A state cut into its congressional districts, each wearing its number. */
+function districtView(place: StateInfo, file: DistrictFile): SheetView {
+  return {
+    sheet: stateSheet(file),
+    names: file.ids.map((id, n) => ({ id, full: file.short[n] === "At Large" ? "" : file.short[n], short: "" })),
+    stars: [{ id: place.code, x: file.capital[0], y: file.capital[1], gold: Boolean(place.world), big: true }],
+    tiny: 4,
+    caption: (hit) => (hit.kind === "star" ? capitalLine(place) : file.names[file.ids.indexOf(hit.id)] ?? ""),
+  };
+}
+
+/**
+ * A county's own map: each city and named community a shape with its name on it where there is room, a dot on each city
+ * hall, a triangle on the county's seat. A community has no hall: the county governs it.
+ */
 function countyView(file: CountyFile, chambers: Record<string, ChamberEntry>): SheetView {
   const sheet = stateSheet(file);
   const county = countyName(file.code, file.name).name;
   const name = (id: string) => (isUnincorporated(id) ? `Unincorporated ${county}` : file.names[file.ids.indexOf(id)] ?? "");
-  const halls = file.ids.filter((id) => !isUnincorporated(id)).map((id) => {
+  const halls = file.ids.filter((_, n) => isCity(file, n)).map((id) => {
     const heart = sheet.shapes.get(id)!.heart;
     return { id, x: heart.x + 0.5, y: heart.y + 0.5, gold: Boolean(chambers[id]), big: false, mark: "dot" as const };
   });
@@ -106,7 +126,9 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
   back.textContent = "← United States";
 
   /** The state whose map is open; null on the map of the whole country. */
-  let open: { place: StateInfo; file: StateFile } | null = null;
+  let open: { place: StateInfo; file: StateFile; districts?: DistrictFile } | null = null;
+  /** What a state's map is cut into. It stays as it was left when another state is opened. */
+  let layer: Layer = "counties";
   /** The county whose map is open, inside that state; null on the state's own map. */
   let county: CountyFile | null = null;
   let chambers: Record<string, ChamberEntry> = {};
@@ -119,6 +141,8 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
     open: (code) => openPlace(code),
     county: (fips) => (fips && open && hasCities(open.place) ? showCounty(open.place, fips) : pick(fips ? { kind: "county", fips } : null, true)),
     city: (id) => pick(id ? { kind: "city", id } : null, true),
+    district: (id) => pick(id ? { kind: "district", id } : null, true),
+    layer: (next) => setLayer(next),
     leaveCounty: () => open && showState(open.place),
     capital: (code) => goToCapital(code),
     travel,
@@ -134,6 +158,7 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
         else pick(hit.id === county.code ? null : { kind: "city", id: hit.id });
       } else if (hit.kind === "star" && open && hit.id !== open.place.code) travel(`chamber:${hit.id}`); // a county board's triangle
       else if (hit.kind === "star") goToCapital(hit.id);
+      else if (open?.districts) pick({ kind: "district", id: hit.id });
       else if (open && hasCities(open.place)) showCounty(open.place, hit.id);
       else if (open) pick({ kind: "county", fips: hit.id });
       else openPlace(hit.id);
@@ -151,23 +176,27 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
     else if (open && county) panel.countyMap(open.place, county);
     else if (open && picked?.kind === "county") panel.county(open.place, open.file, picked.fips);
     else if (open && picked?.kind === "capital") panel.capital(open.place, open.file);
+    else if (open?.districts && picked?.kind === "district") panel.district(open.place, open.districts, picked.id);
+    else if (open?.districts) panel.districts(open.place, open.districts);
     else if (open) panel.state(open.place, open.file);
     else if (place) panel.place(place);
     else panel.overview();
-    scene.select(picked?.kind === "county" ? picked.fips : picked?.kind === "place" ? picked.code : picked?.kind === "city" ? picked.id : null, false);
+    scene.select(picked?.kind === "county" ? picked.fips : picked?.kind === "place" ? picked.code : picked?.kind === "city" || picked?.kind === "district" ? picked.id : null, false);
     scene.markStar(picked?.kind === "capital" && open ? open.place.code : null);
 
     const countyTitle = county ? countyName(county.code, county.name).name : "";
-    const cities = county ? county.ids.filter((id) => !isUnincorporated(id)).length : 0;
+    const cities = county ? county.ids.filter((_, n) => isCity(county!, n)).length : 0;
     document.querySelector("#hud-title strong")!.textContent = county ? countyTitle : open ? open.place.name : ATLAS_NAME;
     document.title = `${county ? countyTitle : open ? open.place.name : ATLAS_NAME} · Capitol World`;
     $("stamp").textContent = county
       ? `${cities} ${cities === 1 ? "city" : "cities and towns"}${county.seat ? ` · county seat ${county.seat.name}` : ""}`
+      : open?.districts ? `${open.districts.ids.length} congressional ${open.districts.ids.length === 1 ? "district" : "districts"} · ${open.districts.session}`
       : open ? `${open.file.ids.length} ${countyWords(open.place.code)[1]} · capital ${open.place.capital}` : membersLine || "Pick a state";
     back.hidden = !open;
     back.textContent = county && open ? `← ${open.place.name}` : "← United States";
     const hash = county ? (picked?.kind === "city" ? `#city=${county.code}.${picked.id}` : `#county=${county.code}`)
-      : picked?.kind === "county" ? `#county=${picked.fips}` : picked?.kind === "capital" && open ? `#capital=${open.place.code}` : place ? `#state=${place.code}` : "";
+      : picked?.kind === "county" ? `#county=${picked.fips}` : picked?.kind === "capital" && open ? `#capital=${open.place.code}`
+      : open?.districts ? `#congress=${open.place.code}${picked?.kind === "district" ? `.${districtTail(picked.id)}` : ""}` : place ? `#state=${place.code}` : "";
     if (location.hash !== hash) history.replaceState(null, "", location.pathname + location.search + hash);
   }
 
@@ -176,7 +205,14 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
     picked = next;
     render();
     if (fly && next?.kind === "county") scene.select(next.fips, true);
-    if (fly && next?.kind === "city") scene.select(next.id, true);
+    if (fly && (next?.kind === "city" || next?.kind === "district")) scene.select(next.id, true);
+  }
+
+  /** Cut the state's map another way, and show it so if a state is open. */
+  function setLayer(next: Layer) {
+    if (next === layer) return;
+    layer = next;
+    if (open) showState(open.place, null, true);
   }
 
   function showNation(next: Picked = null) {
@@ -190,18 +226,19 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
   let shown = false; // whether any map has been put on show yet
 
   /** Open a state's own map; then pick something on it, if asked. */
-  function showState(place: StateInfo, next: Picked = null) {
-    if (open?.place === place && !county) return pick(next, true);
+  function showState(place: StateInfo, next: Picked = null, again = false) {
+    if (open?.place === place && !county && !again) return pick(next, true);
     const turn = ++asked;
-    loadState(place.code).then(
-      (file) => {
+    Promise.all([loadState(place.code), layer === "congress" ? loadDistricts(place.code) : undefined]).then(
+      ([file, districts]) => {
         if (turn !== asked || signal.aborted) return;
-        open = { place, file };
+        open = { place, file, districts };
         county = null;
         shown = true;
-        scene.show(stateView(place, file, chambers));
-        // A county the address names but the state does not have is nothing picked.
-        pick(next?.kind === "county" && !file.ids.includes(next.fips) ? null : next, true);
+        scene.show(districts ? districtView(place, districts) : stateView(place, file, chambers));
+        // A county or a district the address names but the state does not have is nothing picked.
+        const missing = (next?.kind === "county" && !file.ids.includes(next.fips)) || (next?.kind === "district" && !districts?.ids.includes(next.id)) || (next?.kind === "county" && districts);
+        pick(missing ? null : next, true);
       },
       (error) => {
         console.error(error);
@@ -249,10 +286,18 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
 
   /** Go where the address says. */
   function follow() {
-    const [, kind, value] = /^#(state|county|city|capital)=([\w.]+)$/.exec(decodeURIComponent(location.hash)) ?? [];
-    const place = kind === "county" || kind === "city" ? stateOfCounty(value) : STATE[(value ?? "").toUpperCase()];
+    const [, kind, value] = /^#(state|county|city|capital|congress)=([\w.]+)$/.exec(decodeURIComponent(location.hash)) ?? [];
+    const place = kind === "county" || kind === "city" ? stateOfCounty(value) : STATE[(value ?? "").split(".")[0].toUpperCase()];
     if (!place) return showNation();
     const [fips, city] = (value ?? "").split(".");
+    if (kind === "congress" && hasCounties(place)) {
+      // The address names a district by the end of its code; its whole code is the same for every district of this Congress.
+      const wanted = city ? `5001900US${city}` : null;
+      if (open?.place === place && open.districts && !county && (picked?.kind === "district" ? picked.id : null) === wanted) return;
+      const changed = layer !== "congress";
+      layer = "congress";
+      return showState(place, wanted ? { kind: "district", id: wanted } : null, changed);
+    }
     if (kind === "county" || kind === "city") {
       // The address is brought into line with what is picked, which is itself a change of address: do nothing for one that is already so.
       if (county?.code === fips && (picked?.kind === "city" ? picked.id : undefined) === city) return;
@@ -279,7 +324,7 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
     chambers = list;
     panel.setChambers(list);
     if (county) scene.show(countyView(county, chambers));
-    else if (open) scene.show(stateView(open.place, open.file, chambers));
+    else if (open && !open.districts) scene.show(stateView(open.place, open.file, chambers));
     if (shown) render();
   });
 

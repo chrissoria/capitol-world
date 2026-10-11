@@ -1,8 +1,11 @@
 // The whiteboard in the Library of Congress: one chart at a time, drawn stroke by
 // stroke with marker pens. The Stats tab chooses which measures are counted (the
 // Congresses, the period, the kind of measure); the board chooses what to plot
-// and how to split it.
+// and how to split it. It can also draw the world's place itself: how old its
+// people are, how it voted, what it earns beside the places it is part of
+// (../data/places.ts).
 
+import type { PlaceChart } from "../data/places";
 import { ordinal } from "../data/types";
 import { drawFigures } from "../world/art";
 import { el } from "./dom";
@@ -104,6 +107,17 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
   const who = pick("wb-who", WHO);
   const partisan = config?.parties !== false;
   who.hidden = !partisan;
+  // The charts of the place itself, which arrive after the board is made. They are picked from the same list as the measures.
+  let placeCharts: PlaceChart[] = [];
+  const PLACE = "place:";
+  const chosenPlace = () => placeCharts.find((chart) => PLACE + chart.key === measure.value);
+  /** A chart of the place is not split, narrowed or limited to some years: those choices are put away while one is up. */
+  const tidy = () => {
+    const place = Boolean(chosenPlace());
+    across.hidden = place;
+    who.hidden = place || !partisan;
+    years.hidden = place || known.split(",").length < 2;
+  };
   // The years to plot, for a closer look at part of what the Stats panel has chosen.
   const fromYear = el("select", { id: "wb-from", "aria-label": "From year" });
   const toYear = el("select", { id: "wb-to", "aria-label": "To year" });
@@ -223,6 +237,64 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     };
     const write = (text: string, x: number, y: number, size: number, color = PEN.black, align: CanvasTextAlign = "center") =>
       notes.push({ text, x, y, size, color, align, after: strokes.length });
+    const hatch = (x: number, y: number, w: number, h: number, color: string) => {
+      line([[x, y + h], [x, y], [x + w, y], [x + w, y + h]], color, 3);
+      for (let d = -h + 7; d < w; d += 8) {
+        const sx = Math.max(x, x + d);
+        const ex = Math.min(x + w, x + d + h);
+        line([[sx, y + h - (sx - x - d)], [ex, y + h - (ex - x - d)]], color, 1.6);
+      }
+    };
+
+    const chart = chosenPlace();
+    if (chart) {
+      const small = Math.max(11, Math.min(15, width / 42));
+      write(chart.title, 18, 30, Math.max(15, Math.min(24, width / 26)), PEN.black, "left");
+      write(chart.caption, 18, 30 + small * 1.5, small, PEN.grey, "left");
+      const show = (value: number) =>
+        chart.unit === "percent" ? `${value < 10 ? value.toFixed(1) : Math.round(value)}%` : `${chart.unit === "dollars" ? "$" : ""}${Math.round(value).toLocaleString()}`;
+      const pen = (party?: string) => (party === "R" ? PEN.R : party === "D" ? PEN.D : party === "I" ? PEN.I : PEN.black);
+      const left = chart.unit === "percent" ? 56 : 84;
+      const right = width - 20;
+      const top = 30 + small * 1.5 + 34;
+      const bottom = height - 44;
+      const max = Math.max(1e-9, ...chart.bars.map((bar) => bar.value)) * 1.12;
+      if (chart.sideways) {
+        const rowH = (bottom - top + 10) / chart.bars.length;
+        const x0 = Math.min(width * 0.36, 200);
+        line([[x0, top - 8], [x0, bottom + 4]], PEN.black, 3);
+        chart.bars.forEach((bar, i) => {
+          const y = top - 4 + i * rowH;
+          const w = ((right - x0 - 84) * bar.value) / max;
+          // The place itself comes first, in black; the places it is set beside are in grey.
+          const color = bar.party ? pen(bar.party) : i === 0 ? PEN.black : PEN.grey;
+          write(bar.label.length > 26 ? `${bar.label.slice(0, 25)}…` : bar.label, x0 - 8, y + rowH * 0.55, small * 0.95, PEN.black, "right");
+          line([[x0, y + 3], [x0 + w, y + 3], [x0 + w, y + rowH - 7], [x0, y + rowH - 7]], color, 3);
+          for (let d = 6; d < w; d += 8) line([[x0 + d, y + rowH - 7], [Math.min(x0 + w, x0 + d + rowH - 10), y + 3 + Math.max(0, x0 + d + rowH - 10 - (x0 + w))]], color, 1.6);
+          write(show(bar.value), x0 + w + 8, y + rowH * 0.55, small, color, "left");
+        });
+      } else {
+        line([[left, top - 6], [left, bottom], [right, bottom]], PEN.black, 3);
+        for (const part of [0.5, 1]) {
+          const y = bottom - (bottom - top) * part;
+          line([[left - 5, y], [left + 5, y]], PEN.black, 2);
+          write(show(max * part), left - 9, y + 4, small * 0.9, PEN.grey, "right");
+        }
+        const slot = (right - left - 16) / chart.bars.length;
+        const barW = Math.min(slot * 0.62, 110);
+        // A name too long for its place under the bar is written smaller, and cut short if it still does not fit.
+        const room = Math.max(4, Math.floor(slot / (small * 0.5)));
+        chart.bars.forEach((bar, i) => {
+          const x = left + 8 + slot * i + (slot - barW) / 2;
+          const h = ((bottom - top) * bar.value) / max;
+          const color = bar.party ? pen(bar.party) : chart.key === "ages" || i === 0 ? PEN.black : PEN.grey;
+          hatch(x, bottom - h, barW, h, color);
+          write(show(bar.value), x + barW / 2, bottom - h - 8, small * (chart.bars.length > 10 ? 0.85 : 1.1), color);
+          write(bar.label.length > room ? `${bar.label.slice(0, room - 1)}…` : bar.label, x + barW / 2, bottom + 18, small * 0.9, PEN.black);
+        });
+      }
+      return { strokes, notes, summary: chart.bars.map((bar) => `${bar.label}: ${show(bar.value)}`).join(", ") };
+    }
 
     const data = source();
     const spec: BoardSpec = { measure: measure.value as BoardSpec["measure"], across: across.value as BoardSpec["across"], who: who.value as BoardSpec["who"] };
@@ -335,14 +407,6 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
       return { strokes, notes, summary: "No measures match" };
     }
     const max = Math.max(1e-9, ...bars.map((bar) => bar.value)) * 1.12;
-    const hatch = (x: number, y: number, w: number, h: number, color: string) => {
-      line([[x, y + h], [x, y], [x + w, y], [x + w, y + h]], color, 3);
-      for (let d = -h + 7; d < w; d += 8) {
-        const sx = Math.max(x, x + d);
-        const ex = Math.min(x + w, x + d + h);
-        line([[sx, y + h - (sx - x - d)], [ex, y + h - (ex - x - d)]], color, 1.6);
-      }
-    };
     if (spec.across === "area") {
       // Sideways, so the long names fit.
       const rowH = (bottom - top + 10) / bars.length;
@@ -437,7 +501,7 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     paint(started);
   }
 
-  for (const node of [measure, across, who, fromYear, toYear]) node.addEventListener("change", () => draw());
+  for (const node of [measure, across, who, fromYear, toYear]) node.addEventListener("change", () => (tidy(), draw()));
   // "Just the board" hides the room for anyone who wants the chart as large as it will go.
   const ZOOM_KEY = "capitol-world-board";
   const setZoom = (on: boolean) => {
@@ -484,12 +548,27 @@ export function createWhiteboard(root: HTMLElement, onChange: (open: boolean) =>
     setSource(next: () => BoardData) {
       source = next;
     },
+    /** The charts of the world's place have arrived: offer them under the measures. */
+    setPlace(charts: PlaceChart[], name: string) {
+      placeCharts = charts;
+      measure.querySelector("optgroup")?.remove();
+      if (!charts.length) return;
+      const group = el("optgroup", { label: name });
+      for (const chart of charts) group.append(el("option", { value: PLACE + chart.key }, chart.title));
+      measure.append(group);
+    },
+    /** Show the board with one of the place's charts on it. */
+    openPlace(key: PlaceChart["key"]) {
+      if (placeCharts.some((chart) => chart.key === key)) measure.value = PLACE + key;
+      this.open();
+    },
     /** Show the board, optionally with a particular chart. */
     open(spec: Partial<BoardSpec> = {}) {
       if (spec.measure && measures.some(([key]) => key === spec.measure)) measure.value = spec.measure;
       // A world's board may not have every way to split (the Court's has no parties): fall back to its first.
       if (spec.across) across.value = splits.some(([key]) => key === spec.across) ? spec.across : splits[0][0];
       if (spec.who !== undefined) who.value = partisan ? spec.who : "";
+      tidy();
       if (root.hidden) {
         // The window looks out on the Capitol.
         const world = outside();
