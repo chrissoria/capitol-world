@@ -244,7 +244,7 @@ async function main() {
   backButton.addEventListener("click", () => {
     if (def.room) switchTo(null, "push", "usa", chamberWayOut());
     else if (indoors) scene.leave();
-    else switchTo(null, "push", "usa", def.key === "california" ? "#state=CA" : "");
+    else switchTo(null, "push", "usa"); // to the whole country, which is what the button says
   });
   addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
