@@ -197,6 +197,60 @@ select:focus-visible {
   text-shadow: 2px 2px 0 var(--ink);
 }
 
+/* ── The guide: a pelican that looks in over the lower left corner of the map ── */
+
+#guide {
+  position: absolute;
+  left: -18px;
+  bottom: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+  cursor: pointer;
+  /* Only the top of its head and its bill show until it is called up. */
+  transform: translateY(calc(100% - 34px));
+  transition: transform 0.28s cubic-bezier(0.34, 1.7, 0.64, 1);
+}
+
+#guide.out {
+  transform: translateY(34px);
+}
+
+#guide canvas {
+  display: block;
+  image-rendering: pixelated;
+}
+
+#guide .guide-words {
+  position: absolute;
+  left: 126px;
+  bottom: calc(100% - 20px);
+  width: 190px;
+  padding: 8px 10px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: bold;
+  line-height: 1.35;
+  text-align: left;
+  color: var(--ink);
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px 10px 10px 2px;
+  box-shadow: 3px 3px 0 var(--ink);
+  opacity: 0;
+  transform: scale(0.6);
+  transform-origin: left bottom;
+  transition: opacity 0.12s, transform 0.2s cubic-bezier(0.34, 1.7, 0.64, 1);
+  pointer-events: none;
+}
+
+#guide.out .guide-words {
+  opacity: 1;
+  transform: scale(1);
+  transition-delay: 0.14s;
+}
+
 /* ── Panel ── */
 
 #panel {
@@ -445,7 +499,9 @@ a {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #clock-bar i {
+  #clock-bar i,
+  #guide,
+  #guide .guide-words {
     transition: none;
   }
 }

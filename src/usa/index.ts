@@ -16,6 +16,7 @@ import { niceDate } from "../ui/dom";
 import { loadChambers, type ChamberEntry } from "../worlds/chamber";
 import type { Destination } from "../worlds/types";
 import { nationExtras } from "./art";
+import { createGuide } from "./guide";
 import { createAtlasPanel } from "./panel";
 import { startAtlas, type Hit, type SheetView } from "./scene";
 import { CAPITALS, TERRITORY_BOX } from "./shapes";
@@ -148,6 +149,8 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
     travel,
   });
 
+  const guide = createGuide($("stage"), signal);
+
   const scene = startAtlas($("game"), {
     covered: () => $("hud").getBoundingClientRect().bottom - $("game").getBoundingClientRect().top,
     onPick(hit: Hit | null) {
@@ -171,6 +174,7 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
 
   /** Bring the panel, the title and the address into line with what is open and picked. */
   function render() {
+    guide.show(!open); // the guide speaks of the whole country's map, and that corner is not sea on a state's
     const place = open?.place ?? (picked?.kind === "place" ? STATE[picked.code] : undefined);
     if (open && county && picked?.kind === "city") panel.city(open.place, county, picked.id);
     else if (open && county) panel.countyMap(open.place, county);

@@ -159,6 +159,7 @@ async function main() {
   const storyButton = $<HTMLButtonElement>("replay-all"); // the whole period, in a world that can replay it
   storyButton.textContent = def.words.replayAll ?? "";
   const backButton = $<HTMLButtonElement>("back");
+  let indoors = false; // whether a building is open, which is what the back button then leads out of
   wireMusic();
   const clock = $("clock");
   let current: Target | null = null;
@@ -197,15 +198,22 @@ async function main() {
       calendar.close();
       // The chambers have their own tune, and so do the committee rooms.
       music.setTrack(!inside ? "map" : def.room ? roomTrack() : inside.place === "House" || inside.place === "Senate" || !def.legislature ? "inside" : "committee");
-      backButton.hidden = !inside;
-      if (def.room) backButton.textContent = "← Map"; // a world that is one room has no map of its own: the way out is to the country's
+      // Out of doors the button leads back to the map of the country; inside a building, back out of it. A world that
+      // is one room has no out of doors of its own, so there it always leads to the country's map.
+      indoors = Boolean(inside);
+      backButton.hidden = false;
+      backButton.textContent = def.room ? "← Map" : inside ? "← Back outside" : "← United States";
       replayButton.hidden = Boolean(inside) || !scene.hasEvents;
       storyButton.hidden = Boolean(inside) || !scene.hasStory || !def.words.replayAll;
-      $("fit").textContent = inside ? "Whole building" : "Whole map";
+      $("fit").textContent = inside ? "Fit the building" : "Fit to screen";
       $("stamp").textContent = inside ? `Inside ${inside.label} · ${inside.note}` : stamp;
     },
     onReady() {
       loading.remove();
+      if (!def.room) {
+        backButton.hidden = false;
+        backButton.textContent = "← United States";
+      }
       panel = createPanel(world, {
         select: (target) => scene.select(target),
         filter: (filter) => scene.setFilter(filter),
@@ -233,7 +241,11 @@ async function main() {
   if (import.meta.env.DEV) (window as unknown as { scene: WorldScene }).scene = scene;
   replayButton.addEventListener("click", () => (scene.isReplaying ? scene.skipReplay() : scene.replay()));
   storyButton.addEventListener("click", () => scene.replay(true));
-  backButton.addEventListener("click", () => (def.room ? switchTo(null, "push", "usa", chamberWayOut()) : scene.leave()));
+  backButton.addEventListener("click", () => {
+    if (def.room) switchTo(null, "push", "usa", chamberWayOut());
+    else if (indoors) scene.leave();
+    else switchTo(null, "push", "usa", def.key === "california" ? "#state=CA" : "");
+  });
   addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
     if (calendar.isOpen) calendar.close();
