@@ -74,7 +74,7 @@ function stateView(place: StateInfo, file: StateFile, chambers: Record<string, C
   // A county whose board has a room wears a gold triangle, so the board can be reached without opening the county.
   const boards = file.ids.filter((fips) => chambers[fips]).map((fips) => {
     const heart = sheet.shapes.get(fips)!.heart;
-    return { id: fips, x: heart.x + 0.5, y: heart.y + 0.5, gold: true, big: false, mark: "triangle" as const };
+    return { id: fips, x: heart.x + 0.5, y: heart.y + 0.5, gold: true, big: false, mark: "small-triangle" as const };
   });
   return {
     sheet,

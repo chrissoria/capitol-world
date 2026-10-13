@@ -202,7 +202,7 @@ select:focus-visible {
 #almanac {
   position: absolute;
   right: 0;
-  top: 64px;
+  top: 100px; /* below the buttons, which take two rows on a narrow screen */
   padding: 0;
   border: 0;
   background: none;

@@ -32,8 +32,8 @@ export interface StarSpec {
   gold: boolean;
   /** Drawn larger: the one capital on a state's own map, or one with a world. */
   big: boolean;
-  /** What stands there, when it is not a capital: a triangle for a county's seat, a dot for a city hall. */
-  mark?: "triangle" | "dot";
+  /** What stands there, when it is not a capital: a triangle for a county's seat (a small one on a state's map), a dot for a city hall. */
+  mark?: "triangle" | "small-triangle" | "dot";
 }
 
 export interface SheetView {

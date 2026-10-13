@@ -31,12 +31,14 @@ const STAR = ["....#....", "....#....", "...###...", "#########", ".#######.", "
 /** The marks for the other seats of government: a triangle where a county's sits, a dot for a city hall. */
 const TRIANGLE = ["....#....", "....#....", "...###...", "...###...", "..#####..", "..#####..", ".#######.", ".#######.", "#########"];
 const DOT = [".........", "...###...", "..#####..", ".#######.", ".#######.", ".#######.", "..#####..", "...###...", "........."];
-export const MARKS = { star: STAR, triangle: TRIANGLE, dot: DOT };
+/** The triangle again, smaller: for a state's map, where every county with a room wears one and thirty of the full size crowd it. */
+const SMALL_TRIANGLE = ["..#..", "..#..", ".###.", ".###.", "#####"];
+export const MARKS = { star: STAR, triangle: TRIANGLE, "small-triangle": SMALL_TRIANGLE, dot: DOT };
 
 /** A capital's star, or another seat's mark, with a dark edge: `size` pixels to each square of the pattern. */
 export function drawStar(size: number, color: string, pattern: string[] = STAR): HTMLCanvasElement {
   const edge = size;
-  const [element, ctx] = canvas(9 * size + edge * 2, 9 * size + edge * 2);
+  const [element, ctx] = canvas(pattern[0].length * size + edge * 2, pattern.length * size + edge * 2);
   const paint = (dx: number, dy: number, fill: string) =>
     pattern.forEach((line, row) => {
       [...line].forEach((mark, col) => {
