@@ -9,6 +9,7 @@ export const capitol: WorldDef = {
   key: "capitol",
   place: () => "00",
   name: "Capitol World",
+  loading: "Loading the Capitol…",
   periodParam: "congress",
   provider: null,
   legislature: {

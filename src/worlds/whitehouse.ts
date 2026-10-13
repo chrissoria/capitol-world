@@ -224,6 +224,7 @@ function layout(): Layout {
 export const whitehouse: WorldDef = {
   key: "whitehouse",
   name: "White House World",
+  loading: "Loading the White House…",
   periodParam: "term",
   provider,
   layout,

@@ -136,8 +136,11 @@ the plan and what is built.
 
 ## The map of the United States
 
-The worlds are reached from a map of the country (`?world=usa`), and the board
-on the lawn left of the White House leads out to it. It is not a world: nothing
+The site opens on a map of the country, and the worlds are reached from it (the
+address with no world named, or `?world=usa`; the Capitol is `?world=capitol`).
+The board on the lawn left of the White House leads back out to it. A link from
+before the map was the way in, one that names no world and points at a bill, a
+member, a building or a past Congress, still opens the Capitol. It is not a world: nothing
 on it moves, and it has no data of its own beyond who each place sends to
 Congress, which it reads from Capitol World's file.
 

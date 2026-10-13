@@ -1,5 +1,5 @@
 // The maps of the United States as a page of their own: the scene, the panel beside it, and the
-// buttons they share with the worlds. Opened with `?world=usa`. The address can name a state
+// buttons they share with the worlds. It is where a visitor lands: the address with no world named, or `?world=usa`. The address can name a state
 // (`#state=CA`), a county (`#county=06037`), a city (`#city=06073.0666000`, the county and then the
 // place) or a capital (`#capital=CA`).
 //

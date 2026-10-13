@@ -33,10 +33,22 @@ useSource(def.source);
 // The map of the United States is not a world: it has no items of its own, and borrows the Capitol's members.
 let atlas = atlasInAddress();
 if (atlas) setCongress(null);
+nameWorld();
 let shownPlace = placeInAddress(); // whose chamber is on show, when one is
 let life = new AbortController(); // ends the listeners of the Congress on show
 let showing: { destroy(): void } | undefined;
 let opened = 0;
+
+/**
+ * An address that names no world and is not the map's is the Capitol's, from before the map was the way in. It is given
+ * the Capitol's name, so that it is still the Capitol's once the bill it points at is put down.
+ */
+function nameWorld() {
+  const query = new URLSearchParams(location.search);
+  if (atlas || query.has("world")) return;
+  query.set("world", def.key);
+  history.replaceState(null, "", `${location.pathname}?${query}${location.hash}`);
+}
 
 /** Show another Congress (null for the current one) in place, or go somewhere else: another world, or the map of the United States. */
 function switchTo(congress: number | null, address: "push" | "replace" | "keep" = "push", world: Destination = atlas ? "usa" : def.key, hash = "") {
@@ -61,14 +73,13 @@ function switchTo(congress: number | null, address: "push" | "replace" | "keep" 
   if (address !== "keep") {
     const query = new URLSearchParams(location.search);
     for (const name of ["congress", "term", "session", "world", "place"]) query.delete(name);
-    if (atlas) query.set("world", "usa");
-    else if (def.key !== "capitol") query.set("world", def.key);
+    if (!atlas) query.set("world", def.key); // the map is where the bare address lands, so every world is named
     if (!atlas && place) query.set("place", place);
     if (congress !== null) query.set(def.periodParam, String(congress));
     const search = query.toString();
     const next = `${location.pathname}${search ? `?${search}` : ""}${address === "replace" ? location.hash : hash}`;
     history[address === "push" ? "pushState" : "replaceState"](null, "", next);
-  }
+  } else nameWorld();
   music.setTrack("map");
   void (atlas ? showAtlas() : main());
 }
@@ -106,6 +117,7 @@ async function main() {
   const turn = ++opened;
   const { signal } = life;
   const loading = $("loading");
+  loading.textContent = def.loading;
   let loaded;
   try {
     loaded = await loadWorld();
@@ -115,7 +127,7 @@ async function main() {
     loading.textContent = def.key === "capitol" && archived
       ? `The ${ordinal(archived)} Congress could not be loaded. `
       : "The map data could not be loaded. Please try again later. ";
-    if (archived !== null || def.key !== "capitol") loading.append(Object.assign(document.createElement("a"), { href: `${location.pathname}${archived !== null && def.key !== "capitol" ? `?world=${def.key}` : ""}`, textContent: archived !== null && def.legislature ? `Open the current ${def.legislature.period}` : "Open the current Congress" }));
+    if (archived !== null || def.key !== "capitol") loading.append(Object.assign(document.createElement("a"), { href: `${location.pathname}?world=${def.key}`, textContent: archived !== null && def.legislature ? `Open the current ${def.legislature.period}` : "Open the current Congress" }));
     console.error(error);
     return;
   }

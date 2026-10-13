@@ -435,6 +435,7 @@ function layout(): Layout {
 export const court: WorldDef = {
   key: "court",
   name: "Supreme Court World",
+  loading: "Loading the Supreme Court…",
   periodParam: "term",
   provider,
   layout,

@@ -160,6 +160,7 @@ export const california: WorldDef = {
   key: "california",
   place: () => "06",
   name: "California Capitol World",
+  loading: "Loading the State Capitol…",
   periodParam: "session",
   provider: null,
   source,

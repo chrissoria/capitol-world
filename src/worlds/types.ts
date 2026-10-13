@@ -113,6 +113,8 @@ export interface Legislature {
 export interface WorldDef {
   key: WorldKey;
   name: string;
+  /** What the page says while the world's data is on its way: "Loading the White House…". */
+  loading: string;
   /** Set for a legislature: Congress, or a state's. */
   legislature?: Legislature;
   /** Where a legislature's files are, when they are not Congress's. */

@@ -417,6 +417,7 @@ function layout(): Layout {
 
 export const chamber: WorldDef = {
   key: "chamber",
+  loading: "Loading the chamber…",
   place: () => placeInAddress(),
   name: "Council Chamber",
   periodParam: "session",
