@@ -149,6 +149,8 @@ Congress, which it reads from Capitol World's file.
 - A county opens to a map of its own, with its cities and its named
   unincorporated communities. A triangle is where the county's government
   sits and a dot is a city hall; a gold one leads into that body's room.
+  A county's card lists its figures from the us-places dataset: its people
+  and their ages, income, home value, its economy, how it voted.
 - A state's map can be switched from its counties to its congressional
   districts, each with who sits for it, its people, income and home value.
   The choice holds from state to state.
@@ -158,6 +160,14 @@ Congress, which it reads from Capitol World's file.
   built yet.
 - The District and the five territories have no map of their own; a click
   opens their card.
+- A book is tucked into the upper right edge of the map, half out of sight
+  until the pointer comes near (`src/usa/book.ts`). Opened, it fills the
+  screen as two facing pages and holds what the worlds hold, to be read
+  instead of walked through: the country, each state, county, city and
+  congressional district with its figures; each world's items by where they
+  stand, its latest movements, its people, and a search of every item. A page
+  can lead back onto the map or into the world it is about, straight to a
+  bill. It reads the worlds' own files and keeps none.
 - The address can name a state (`#state=CA`), a county by its Census code
   (`#county=06037`), a city by its county and its own code
   (`#city=06073.0666000`), a capital (`#capital=CA`), or a state's

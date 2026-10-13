@@ -64,6 +64,12 @@ export async function loadPlace(id: string): Promise<PlaceFacts[]> {
   return chain;
 }
 
+/** Every place in one state, by the state's postal code: its counties, its cities and communities, its districts. */
+export async function loadPlacesIn(code: string): Promise<PlaceFacts[]> {
+  const file = await indexFile(`${code}.json.gz`);
+  return Object.keys(file.places).map((id) => rowOf(file, id)!);
+}
+
 /** The fifty states and the District, for setting the country's own figures beside. */
 export async function loadStates(): Promise<PlaceFacts[]> {
   const file = await indexFile("US.json");

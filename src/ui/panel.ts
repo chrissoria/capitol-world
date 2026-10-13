@@ -16,7 +16,7 @@ import { createRoster } from "./roster";
 import { createStats } from "./stats";
 import { createWhiteboard } from "./whiteboard";
 
-const SHARED_STAGES: Record<string, string> = {
+export const SHARED_STAGES: Record<string, string> = {
   hopper: "Just introduced",
   referral_desk: "Referred (committee not identified)",
   committee: "In committee",

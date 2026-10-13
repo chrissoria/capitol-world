@@ -126,6 +126,37 @@ async function currentFile<T>(file: string): Promise<{ data: T; source: DataSour
   throw lastError;
 }
 
+/** One of a legislature's files from where they are kept, or from the copy that ships with the app, whichever comes. */
+async function fileFrom<T>(from: Source, file: string): Promise<T> {
+  const asked = new URLSearchParams(location.search).get("data");
+  const bundledFirst = from.bundled && (asked === "bundled" || (asked !== "live" && import.meta.env.DEV));
+  const folders = !from.bundled ? [from.root] : bundledFirst ? [BUNDLED, from.root] : [from.root, BUNDLED];
+  let lastError: unknown;
+  for (const folder of folders) {
+    try {
+      return await fetchJson<T>(folder + file);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * A legislature's map file for the period in progress, read whichever world the page is on: the book on the map of
+ * the United States reads several without going into any of them. Congress's when no source is named.
+ */
+export async function loadWorldFrom(from: Source = CONGRESS): Promise<World> {
+  const data = await fileFrom<World>(from, from.gzipped ? "world.json.gz" : "world.json");
+  if (data.schema !== 1 || !Array.isArray(data.bills) || !Array.isArray(data.members)) throw new Error("world.json is not in the expected format");
+  return data;
+}
+
+/** Every item of a legislature's period in progress, read the same way. */
+export function loadSearchFrom(from: Source = CONGRESS): Promise<SearchIndex> {
+  return fileFrom<SearchIndex>(from, "search.json.gz");
+}
+
 export async function loadWorld(): Promise<{ world: World; source: DataSource }> {
   if (provider) return { world: await provider.world(archived), source: "live" };
   const { data, source: from } = await fromEither<World>(archived || source.gzipped ? "world.json.gz" : "world.json");

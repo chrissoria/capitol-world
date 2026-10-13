@@ -16,6 +16,7 @@ import { niceDate } from "../ui/dom";
 import { loadChambers, type ChamberEntry } from "../worlds/chamber";
 import type { Destination } from "../worlds/types";
 import { nationExtras } from "./art";
+import { createBook } from "./book";
 import { createGuide } from "./guide";
 import { createAtlasPanel } from "./panel";
 import { startAtlas, type Hit, type SheetView } from "./scene";
@@ -30,8 +31,11 @@ const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as 
 export interface AtlasContext {
   /** Ends when the page moves on to something else. */
   signal: AbortSignal;
-  /** Go into a world, to one of its people if `member` is given; or into a board's or a council's chamber. */
-  travel(world: Destination, member?: string): void;
+  /**
+   * Go into a world, to one of its people if `member` is given, or to whatever `link` names as that world's address
+   * does ("bill=119-hr-1"); or into a board's or a council's chamber.
+   */
+  travel(world: Destination, member?: string, link?: string): void;
 }
 
 /** What the visitor has picked on the map that is open. */
@@ -150,6 +154,7 @@ export function openAtlas({ signal, travel }: AtlasContext): { destroy(): void }
   });
 
   const guide = createGuide($("stage"), signal);
+  createBook($("stage"), { signal, travel }); // at the map's edge whichever map is open
 
   const scene = startAtlas($("game"), {
     covered: () => $("hud").getBoundingClientRect().bottom - $("game").getBoundingClientRect().top,

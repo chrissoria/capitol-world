@@ -2,6 +2,7 @@
 // it sends to Congress and its counties, and the cards of one county and of a capital. The people
 // come from Capitol World's own file; the maps work without it.
 
+import { loadPlace, placeFigures } from "../data/places";
 import type { Member } from "../data/types";
 import { ordinal } from "../data/types";
 import { el, put } from "../ui/dom";
@@ -37,6 +38,25 @@ const partyName = (party: string) => (party === "R" ? "Republican" : party === "
 const pin = (party: string) => el("span", { class: `pin ${party}`, title: partyName(party) });
 const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const fact = (label: string, value: string) => (value ? el("div", {}, el("dt", {}, label), el("dd", {}, value)) : null);
+
+/**
+ * Everything the us-places dataset counts for a place, as a list that fills in when it arrives: its people and how old
+ * they are, what they earn and what a home is worth, its economy, how it voted. The same figures a world's Stats tab
+ * lists for the place the world is about.
+ */
+function figures(id: string): HTMLElement {
+  const list = el("dl", { class: "facts wide" });
+  const note = el("p", { class: "note" }, "Its figures are on their way…");
+  void loadPlace(id).then(
+    (chain) => {
+      const rows = placeFigures(chain);
+      put(list, ...rows.map((row) => fact(row.label, row.value)));
+      note.textContent = rows.length ? "Counted by the Census Bureau and other public sources, as the us-places dataset keeps them." : "No figures are kept for this place.";
+    },
+    () => (note.textContent = "Its figures could not be read just now."),
+  );
+  return el("div", {}, el("h3", {}, "In figures"), list, note);
+}
 
 export function createAtlasPanel(actions: AtlasActions) {
   const section = document.getElementById("tab-inspect")!;
@@ -282,6 +302,7 @@ export function createAtlasPanel(actions: AtlasActions) {
         el("h2", {}, county.name),
         world ? door(world) : el("p", { class: "note" }, `${county.name} has no world of its own yet. When it does, this is where the way in will be.`),
         el("dl", { class: "facts" }, fact("State", place.name), fact("Census code", fips)),
+        figures(fips),
       );
     },
 
@@ -309,6 +330,7 @@ export function createAtlasPanel(actions: AtlasActions) {
         chamberDoor(file.code) ?? el("p", { class: "note" }, `${county.name}’s board has no room here yet. When it does, the triangle on its seat will turn gold and lead in.`),
         el("p", { class: "note" }, `The triangle is where the county’s government sits${file.seat ? `, in ${file.seat.name}` : ""}. Each dot is a city hall.`),
         el("dl", { class: "facts" }, fact("State", place.name), fact("County seat", file.seat?.name ?? ""), fact("Cities and towns", String(cities.length)), fact("Census code", file.code)),
+        figures(file.code),
         cities.length ? el("h3", {}, count(cities.length, "city or town", "cities and towns")) : null,
         el("ul", { class: "list" }, ...cities),
         communities.length ? el("h3", {}, count(communities.length, "unincorporated community", "unincorporated communities")) : null,

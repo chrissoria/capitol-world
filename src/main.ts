@@ -110,7 +110,7 @@ function wireMusic() {
 /** The map of the United States, from which the worlds are reached. */
 function showAtlas() {
   wireMusic();
-  showing = openAtlas({ signal: life.signal, travel: (world, member) => switchTo(null, "push", world, member ? `#member=${member}` : "") });
+  showing = openAtlas({ signal: life.signal, travel: (world, member, link) => switchTo(null, "push", world, link ? `#${link}` : member ? `#member=${member}` : "") });
 }
 
 async function main() {
