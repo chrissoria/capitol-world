@@ -40,22 +40,31 @@ const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString(
 const fact = (label: string, value: string) => (value ? el("div", {}, el("dt", {}, label), el("dd", {}, value)) : null);
 
 /**
- * Everything the us-places dataset counts for a place, as a list that fills in when it arrives: its people and how old
- * they are, what they earn and what a home is worth, its economy, how it voted. The same figures a world's Stats tab
- * lists for the place the world is about.
+ * Everything the us-places dataset counts for a place: its people and how old they are, what they earn and what a home
+ * is worth, its economy, how it voted. The same figures a world's Stats tab lists for the place the world is about.
+ * They are folded away under one line, and asked for when that line is first opened.
  */
 function figures(id: string): HTMLElement {
   const list = el("dl", { class: "facts wide" });
   const note = el("p", { class: "note" }, "Its figures are on their way…");
-  void loadPlace(id).then(
-    (chain) => {
-      const rows = placeFigures(chain);
-      put(list, ...rows.map((row) => fact(row.label, row.value)));
-      note.textContent = rows.length ? "Counted by the Census Bureau and other public sources, as the us-places dataset keeps them." : "No figures are kept for this place.";
-    },
-    () => (note.textContent = "Its figures could not be read just now."),
-  );
-  return el("div", {}, el("h3", {}, "In figures"), list, note);
+  const fold = el("details", { class: "explain figures" }, el("summary", {}, "In figures"), list, note);
+  let asked = false;
+  fold.addEventListener("toggle", () => {
+    if (!fold.open || asked) return;
+    asked = true;
+    void loadPlace(id).then(
+      (chain) => {
+        const rows = placeFigures(chain);
+        put(list, ...rows.map((row) => fact(row.label, row.value)));
+        note.textContent = rows.length ? "Counted by the Census Bureau and other public sources, as the us-places dataset keeps them." : "No figures are kept for this place.";
+      },
+      () => {
+        note.textContent = "Its figures could not be read just now.";
+        asked = false; // opening it again asks again
+      },
+    );
+  });
+  return fold;
 }
 
 export function createAtlasPanel(actions: AtlasActions) {

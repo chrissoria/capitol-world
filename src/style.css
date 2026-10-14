@@ -1049,6 +1049,11 @@ a {
   outline: 3px solid var(--yellow);
 }
 
+/* A place's figures, folded under one line. */
+.explain.figures .facts {
+  margin: 8px 10px 0;
+}
+
 .list a.meeting {
   display: block;
   padding: 7px 4px;

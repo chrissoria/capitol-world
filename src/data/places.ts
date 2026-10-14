@@ -174,6 +174,12 @@ export function placeFigures(chain: PlaceFacts[]): { label: string; value: strin
   push("People to a square mile", whole("density_per_sq_mi"), "density");
   push("Under 18", share(num(place, "age_under_18")), "ages");
   push("65 and over", older.every((value) => value !== null) ? share(older.reduce<number>((sum, value) => sum + value!, 0)) : "", "ages");
+  // Five groups that add to everyone: Hispanic or Latino people of any race, and the rest by the race they gave.
+  push("White (not Hispanic)", share(num(place, "white_share")));
+  push("Black (not Hispanic)", share(num(place, "black_share")));
+  push("Asian (not Hispanic)", share(num(place, "asian_share")));
+  push("Hispanic or Latino (any race)", share(num(place, "hispanic_share")));
+  push("Another race, or more than one", share(num(place, "other_race_share")));
   push("Median household income", dollars("median_household_income"), "income");
   push("Median home value", dollars("median_home_value"), "home");
   push("Income inequality (Gini, 0 to 1)", num(place, "gini_index")?.toFixed(2) ?? "");
